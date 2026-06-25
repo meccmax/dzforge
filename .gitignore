@@ -1,0 +1,44 @@
+# --- DZ Forge ---
+
+# User-specific config (ships as dzforge.config.example.json instead)
+dzforge.config.json
+
+# Generated map tiles (large, map-specific) — recreate with: python tiler.py
+tiles/
+
+# Source map image(s) — large, map-specific
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+
+# Static data snapshot (regenerated from the live server)
+data.json
+
+# Backups / caches created at runtime
+.dzforge-backups/
+.dzforge-cache/
+.dzforge-remote-backups/
+**/.dzforge-backups/
+*.bak
+.dzforge_known_hosts
+
+# PyInstaller / build output
+build/
+dist/
+*.spec
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+*.rpt

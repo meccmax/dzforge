@@ -1,0 +1,3202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' fonts.googleapis.com 'unsafe-inline'; font-src fonts.gstatic.com; connect-src 'self' generativelanguage.googleapis.com; img-src 'self' blob: data:;">
+<title>Meccmax's Turret Editor for AutomatedTurrets</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0c0a;
+    --panel: #0f1410;
+    --card: #131a14;
+    --border: #2a3d2a;
+    --border-bright: #3d6b3d;
+    --green: #4caf50;
+    --green-bright: #6fcf73;
+    --green-dim: #2d5c2d;
+    --amber: #ffc107;
+    --red: #f44336;
+    --text: #c8e6c9;
+    --text-dim: #6a8a6a;
+    --text-bright: #e8f5e9;
+    --scanline: rgba(0,255,0,0.02);
+    --glow: 0 0 10px rgba(76,175,80,0.3);
+    --glow-strong: 0 0 20px rgba(76,175,80,0.5);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, var(--scanline) 2px, var(--scanline) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* HEADER */
+  .header {
+    background: linear-gradient(135deg, #0a0c0a 0%, #0f1a0f 50%, #0a0c0a 100%);
+    border-bottom: 2px solid var(--green);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 4px 30px rgba(76,175,80,0.2);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .header-icon {
+    font-size: 32px;
+    filter: drop-shadow(0 0 8px var(--green));
+  }
+  .header-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 20px;
+    font-weight: 900;
+    color: var(--green-bright);
+    text-shadow: var(--glow);
+    letter-spacing: 3px;
+    line-height: 1.2;
+  }
+  .header-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+
+  /* STATUS BAR */
+  .status-bar {
+    background: #060806;
+    border-bottom: 1px solid var(--border);
+    padding: 6px 24px;
+    display: flex; gap: 24px; align-items: center;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .status-item { display: flex; gap: 6px; align-items: center; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+  .status-dot.amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* MAIN LAYOUT */
+  .layout { display: flex; height: calc(100vh - 95px); }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .sidebar-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+  }
+  .turret-count {
+    background: var(--green-dim);
+    color: var(--green-bright);
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid var(--green-dim);
+  }
+  .turret-list { overflow-y: auto; flex: 1; }
+  .turret-list::-webkit-scrollbar { width: 4px; }
+  .turret-list::-webkit-scrollbar-track { background: var(--bg); }
+  .turret-list::-webkit-scrollbar-thumb { background: var(--green-dim); }
+
+  .turret-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .turret-item:hover { background: rgba(76,175,80,0.05); }
+  .turret-item.active {
+    background: rgba(76,175,80,0.1);
+    border-left: 3px solid var(--green);
+  }
+  .turret-item.active::before {
+    content: '▶';
+    position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
+    color: var(--green); font-size: 8px;
+  }
+  .turret-item-name {
+    font-size: 12px;
+    color: var(--green-bright);
+    margin-bottom: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .turret-item-meta {
+    font-size: 10px;
+    color: var(--text-dim);
+    display: flex; gap: 8px;
+  }
+  .tag {
+    background: var(--border);
+    padding: 1px 5px;
+    font-size: 9px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .tag.green { background: rgba(76,175,80,0.15); color: var(--green); border-color: var(--green-dim); }
+  .tag.amber { background: rgba(255,193,7,0.15); color: var(--amber); border-color: #7a5c00; }
+  .tag.red { background: rgba(244,67,54,0.15); color: var(--red); border-color: #7a1f1a; }
+
+  .sidebar-footer {
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+
+  /* GROUP FOLDERS */
+  .group-folder { border-bottom: 1px solid var(--border); }
+  .group-folder-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+    background: #0c110c;
+    transition: background 0.15s;
+  }
+  .group-folder-header:hover { background: rgba(76,175,80,0.07); }
+  .group-folder-icon { font-size: 10px; color: var(--text-dim); transition: transform 0.2s; min-width: 10px; }
+  .group-folder-icon.open { transform: rotate(90deg); }
+  .group-color-dot { width: 8px; height: 8px; border-radius: 1px; flex-shrink: 0; }
+  .group-folder-name {
+    font-size: 11px;
+    font-family: 'Orbitron', sans-serif;
+    letter-spacing: 1px;
+    color: var(--text);
+    flex: 1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .group-folder-count { font-size: 9px; color: var(--text-dim); background: var(--border); padding: 1px 5px; }
+  .group-folder-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+  .group-folder-header:hover .group-folder-actions { opacity: 1; }
+  .group-action-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-dim); font-size: 11px; padding: 2px 4px;
+    transition: color 0.15s;
+  }
+  .group-action-btn:hover { color: var(--green); }
+  .group-action-btn.del:hover { color: var(--red); }
+  .group-turrets { display: none; }
+  .group-turrets.open { display: block; }
+  .group-turrets .turret-item { padding-left: 28px; }
+  .ungrouped-header {
+    padding: 6px 12px;
+    font-size: 9px; letter-spacing: 3px;
+    color: var(--text-dim);
+    background: #080a08;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+  }
+
+  /* DRAG AND DROP */
+  .turret-item[draggable="true"] { cursor: grab; }
+  .turret-item[draggable="true"]:active { cursor: grabbing; }
+  .turret-item.dragging { opacity: 0.35; background: rgba(76,175,80,0.05); }
+  .drag-handle {
+    color: var(--text-dim); font-size: 11px; margin-right: 4px;
+    cursor: grab; flex-shrink: 0; opacity: 0.4;
+    transition: opacity 0.15s;
+  }
+  .turret-item:hover .drag-handle { opacity: 1; }
+  .group-folder-header.drag-over {
+    background: rgba(76,175,80,0.18) !important;
+    box-shadow: inset 0 0 0 1px var(--green);
+  }
+  .group-turrets.drag-over-zone {
+    background: rgba(76,175,80,0.06);
+    min-height: 8px;
+  }
+  .ungrouped-header.drag-over {
+    background: rgba(255,193,7,0.12);
+    color: var(--amber);
+    box-shadow: inset 0 0 0 1px var(--amber);
+  }
+  .drop-indicator {
+    height: 2px;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    margin: 0 8px;
+    pointer-events: none;
+  }
+
+  /* RIGHT PANEL (JSON + HISTORY) */
+  .right-panel {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 480px;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+    z-index: 200;
+    box-shadow: -8px 0 40px rgba(0,0,0,0.6);
+  }
+  .right-panel.open { transform: translateX(0); }
+  .right-panel-header {
+    background: linear-gradient(135deg, #0c110c, #0f1a0f);
+    border-bottom: 2px solid var(--green);
+    padding: 0;
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+  }
+  .right-panel-tabs {
+    display: flex;
+  }
+  .rp-tab {
+    flex: 1; padding: 12px 8px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px; letter-spacing: 2px;
+    color: var(--text-dim);
+    background: none; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .rp-tab:hover { color: var(--text); background: rgba(76,175,80,0.05); }
+  .rp-tab.active { color: var(--green-bright); border-bottom-color: var(--green); background: rgba(76,175,80,0.08); }
+  .rp-close {
+    background: none; border: none; color: var(--text-dim);
+    cursor: pointer; padding: 12px 16px; font-size: 16px;
+    transition: color 0.15s; flex-shrink: 0;
+  }
+  .rp-close:hover { color: var(--red); }
+  .right-panel-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .rp-pane { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .rp-pane.active { display: flex; }
+
+  /* JSON PANE */
+  .json-toolbar {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; gap: 8px; align-items: center; flex-shrink: 0;
+    background: #080a08;
+  }
+  .validator-status {
+    flex: 1; font-size: 11px; padding: 4px 10px;
+    border: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .validator-status.valid { border-color: var(--green-dim); color: var(--green); background: rgba(76,175,80,0.08); }
+  .validator-status.invalid { border-color: #7a1f1a; color: var(--red); background: rgba(244,67,54,0.08); }
+  .validator-status.idle { color: var(--text-dim); }
+  #raw-json-editor {
+    flex: 1; resize: none; padding: 12px;
+    background: #060806; border: none; outline: none;
+    color: #a5d6a7; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; line-height: 1.6;
+    overflow-y: auto;
+  }
+  #raw-json-editor.has-error { background: #0c0605; }
+  .error-detail {
+    padding: 8px 12px; font-size: 10px;
+    color: var(--red); background: rgba(244,67,54,0.06);
+    border-top: 1px solid #7a1f1a; flex-shrink: 0;
+    display: none; font-family: 'Share Tech Mono', monospace;
+  }
+  .error-detail.show { display: block; }
+
+  /* HISTORY PANE */
+  .history-toolbar {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; gap: 8px; align-items: center; flex-shrink: 0;
+    background: #080a08;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .history-list { flex: 1; overflow-y: auto; }
+  .history-list::-webkit-scrollbar { width: 4px; }
+  .history-list::-webkit-scrollbar-track { background: var(--bg); }
+  .history-list::-webkit-scrollbar-thumb { background: var(--green-dim); }
+  .history-entry {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.12s;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .history-entry:hover { background: rgba(76,175,80,0.06); }
+  .history-entry.current {
+    background: rgba(76,175,80,0.1);
+    border-left: 3px solid var(--green);
+  }
+  .history-entry.future { opacity: 0.45; }
+  .history-num {
+    font-size: 10px; color: var(--text-dim);
+    min-width: 28px; padding-top: 1px;
+  }
+  .history-info { flex: 1; }
+  .history-action { font-size: 12px; color: var(--text-bright); }
+  .history-time { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .history-restore-btn {
+    font-family: 'Share Tech Mono', monospace; font-size: 10px;
+    background: none; border: 1px solid var(--border-bright);
+    color: var(--text-dim); padding: 3px 8px; cursor: pointer;
+    transition: all 0.15s; white-space: nowrap; align-self: center;
+  }
+  .history-restore-btn:hover { border-color: var(--green); color: var(--green); }
+  .history-entry.current .history-restore-btn { display: none; }
+  .history-badge {
+    font-size: 9px; padding: 1px 5px;
+    background: var(--green-dim); color: var(--green-bright);
+    border: 1px solid var(--green-dim); align-self: center;
+  }
+
+  /* Overlay dim when panel open */
+  .panel-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4); z-index: 199;
+  }
+  .panel-overlay.show { display: block; }
+
+  /* GROUP MODAL */
+  .color-picker-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .color-swatch {
+    width: 28px; height: 28px; cursor: pointer;
+    border: 2px solid transparent; transition: border-color 0.15s;
+  }
+  .color-swatch.selected { border-color: white; }
+
+  /* MAIN EDITOR */
+  .editor {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    background: var(--bg);
+  }
+  .editor::-webkit-scrollbar { width: 6px; }
+  .editor::-webkit-scrollbar-track { background: var(--bg); }
+  .editor::-webkit-scrollbar-thumb { background: var(--border-bright); }
+
+  .no-selection {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; color: var(--text-dim);
+    gap: 16px;
+  }
+  .no-selection-icon { font-size: 64px; filter: grayscale(1) opacity(0.3); }
+  .no-selection-text { font-size: 14px; letter-spacing: 3px; font-family: 'Orbitron', sans-serif; }
+
+  /* SECTION */
+  .section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .section-header {
+    background: rgba(76,175,80,0.08);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px;
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 3px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header:hover { background: rgba(76,175,80,0.12); }
+  .section-header .chevron { margin-left: auto; transition: transform 0.2s; font-size: 10px; }
+  .section-header .chevron.open { transform: rotate(180deg); }
+  .section-body { padding: 16px; }
+  .section-body.hidden { display: none; }
+
+  /* FORM FIELDS */
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field-full { grid-column: 1 / -1; }
+  label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .label-hint {
+    font-size: 9px;
+    color: var(--text-dim);
+    opacity: 0.6;
+    margin-top: 2px;
+  }
+  input[type="text"], input[type="number"], select, textarea {
+    background: #0a0c0a;
+    border: 1px solid var(--border);
+    color: var(--text-bright);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 0 1px var(--green-dim), var(--glow);
+  }
+  select option { background: #0f1410; }
+  input[type="range"] {
+    -webkit-appearance: none;
+    background: transparent;
+    height: 20px;
+    padding: 0;
+    border: none;
+    cursor: pointer;
+  }
+  input[type="range"]:focus { box-shadow: none; border: none; }
+  input[type="range"]::-webkit-slider-track {
+    background: var(--border);
+    height: 4px;
+    border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--green);
+    border-radius: 0;
+    cursor: pointer;
+    box-shadow: 0 0 8px var(--green);
+    margin-top: -5px;
+  }
+  .range-row { display: flex; gap: 10px; align-items: center; }
+  .range-val {
+    min-width: 50px;
+    background: #0a0c0a;
+    border: 1px solid var(--border);
+    color: var(--green-bright);
+    font-size: 13px;
+    padding: 4px 8px;
+    text-align: center;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  /* TOGGLE */
+  .toggle-row { display: flex; align-items: center; gap: 12px; padding: 4px 0; }
+  .toggle-label { font-size: 12px; color: var(--text); flex: 1; }
+  .toggle {
+    position: relative;
+    width: 44px; height: 22px;
+  }
+  .toggle input { display: none; }
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: var(--border);
+    border: 1px solid var(--border-bright);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    width: 16px; height: 16px;
+    background: var(--text-dim);
+    top: 2px; left: 2px;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .toggle input:checked + .toggle-track { background: var(--green-dim); border-color: var(--green); }
+  .toggle input:checked + .toggle-track::after { transform: translateX(22px); background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+  /* TARGET EDITOR */
+  .target-section { margin-bottom: 16px; }
+  .target-title {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .target-title-icon { font-size: 14px; }
+  .target-mode-row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .mode-btn {
+    padding: 4px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    background: #0a0c0a;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mode-btn:hover { border-color: var(--green-dim); color: var(--text); }
+  .mode-btn.active { background: var(--green-dim); border-color: var(--green); color: var(--green-bright); box-shadow: var(--glow); }
+  .mode-btn.active-rev { background: rgba(255,193,7,0.15); border-color: #7a5c00; color: var(--amber); }
+  .mode-btn.active-none { background: rgba(244,67,54,0.1); border-color: #7a1f1a; color: #ff8a80; }
+
+  .entry-list { display: flex; flex-direction: column; gap: 4px; min-height: 32px; }
+  .entry-row { display: flex; gap: 6px; align-items: center; }
+  .entry-input { flex: 1; }
+  .entry-del {
+    background: none; border: 1px solid #7a1f1a; color: var(--red);
+    font-size: 12px; padding: 4px 8px; cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    transition: background 0.15s;
+  }
+  .entry-del:hover { background: rgba(244,67,54,0.15); }
+  .add-entry {
+    margin-top: 6px;
+    background: none; border: 1px dashed var(--border-bright); color: var(--text-dim);
+    font-size: 11px; padding: 5px 12px; cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 2px;
+    transition: all 0.15s; width: 100%;
+  }
+  .add-entry:hover { border-color: var(--green); color: var(--green); }
+  .reverse-flag {
+    background: rgba(255,193,7,0.1); border: 1px solid #7a5c00;
+    color: var(--amber); font-size: 10px; padding: 2px 8px; margin-bottom: 6px;
+    letter-spacing: 1px;
+  }
+
+  /* BUTTONS */
+  .btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    padding: 8px 16px;
+    border: 1px solid;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .btn-green {
+    background: var(--green-dim);
+    border-color: var(--green);
+    color: var(--green-bright);
+  }
+  .btn-green:hover { background: rgba(76,175,80,0.3); box-shadow: var(--glow); }
+  .btn-ghost {
+    background: transparent;
+    border-color: var(--border-bright);
+    color: var(--text-dim);
+  }
+  .btn-ghost:hover { border-color: var(--green-dim); color: var(--text); }
+  .btn-red {
+    background: rgba(244,67,54,0.1);
+    border-color: #7a1f1a;
+    color: #ff8a80;
+  }
+  .btn-red:hover { background: rgba(244,67,54,0.2); }
+  .btn-amber {
+    background: rgba(255,193,7,0.1);
+    border-color: #7a5c00;
+    color: var(--amber);
+  }
+  .btn-amber:hover { background: rgba(255,193,7,0.2); box-shadow: 0 0 10px rgba(255,193,7,0.2); }
+
+  /* OCR MODAL */
+  .ocr-drop-zone {
+    border: 2px dashed var(--border-bright);
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #060806;
+    margin-bottom: 16px;
+  }
+  .ocr-drop-zone:hover, .ocr-drop-zone.drag-over {
+    border-color: var(--amber);
+    background: rgba(255,193,7,0.04);
+  }
+  .ocr-queue { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+  .ocr-queue::-webkit-scrollbar { width: 4px; }
+  .ocr-queue::-webkit-scrollbar-thumb { background: var(--green-dim); }
+  .ocr-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .ocr-item.ocr-error { border-color: #7a1f1a; }
+  .ocr-item.ocr-ok { border-color: var(--green-dim); }
+  .ocr-thumb {
+    width: 90px; height: 90px; object-fit: cover;
+    display: block; border-right: 1px solid var(--border);
+    background: #060806;
+  }
+  .ocr-details { padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .ocr-filename { font-size: 10px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ocr-status { font-size: 11px; display: flex; align-items: center; gap: 6px; }
+  .ocr-status.scanning { color: var(--amber); }
+  .ocr-status.done { color: var(--green); }
+  .ocr-status.err { color: var(--red); }
+  .ocr-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 2px; }
+  .ocr-field { font-size: 10px; color: var(--text-dim); }
+  .ocr-field span { color: var(--text-bright); margin-left: 3px; }
+  .ocr-field-wide { grid-column: 1/-1; }
+  .ocr-assign { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+  .ocr-assign select, .ocr-assign input { font-size: 11px; padding: 4px 6px; flex: 1; min-width: 80px; }
+  .ocr-remove {
+    position: absolute; top: 4px; right: 4px;
+    background: none; border: none; color: var(--text-dim);
+    cursor: pointer; font-size: 13px; line-height: 1;
+    transition: color 0.15s;
+  }
+  .ocr-remove:hover { color: var(--red); }
+  .ocr-progress {
+    height: 2px; background: var(--amber);
+    position: absolute; bottom: 0; left: 0;
+    transition: width 0.3s;
+    box-shadow: 0 0 6px var(--amber);
+  }
+  .ocr-empty {
+    text-align: center; padding: 24px;
+    font-size: 12px; color: var(--text-dim);
+  }
+  .btn-full { width: 100%; justify-content: center; }
+
+  /* TURRET INDEX HEADER */
+  .turret-editor-header {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 24px;
+  }
+  .turret-editor-index {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 36px;
+    font-weight: 900;
+    color: var(--green-dim);
+    line-height: 1;
+    min-width: 60px;
+    text-shadow: 0 0 30px rgba(76,175,80,0.3);
+  }
+  .turret-editor-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--green-bright);
+    text-shadow: var(--glow);
+  }
+  .turret-editor-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  /* XYZ Fields */
+  .xyz-group { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .xyz-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .xyz-x { color: #ff6b6b; }
+  .xyz-y { color: #51cf66; }
+  .xyz-z { color: #74c0fc; }
+
+  /* IMPORT AREA */
+  .import-area {
+    background: #060806;
+    border: 2px dashed var(--border-bright);
+    padding: 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .import-area:hover, .import-area.drag-over {
+    border-color: var(--green);
+    background: rgba(76,175,80,0.05);
+    box-shadow: var(--glow);
+  }
+  .import-icon { font-size: 40px; margin-bottom: 12px; }
+  .import-text { font-size: 14px; color: var(--text-dim); margin-bottom: 8px; }
+  .import-hint { font-size: 11px; color: var(--text-dim); opacity: 0.6; }
+  #file-input { display: none; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--green);
+    box-shadow: 0 0 60px rgba(76,175,80,0.3);
+    max-width: 600px; width: 90%;
+    max-height: 80vh;
+    display: flex; flex-direction: column;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    color: var(--green-bright);
+    letter-spacing: 2px;
+  }
+  .modal-close { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 18px; }
+  .modal-close:hover { color: var(--red); }
+  .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+  .modal-footer { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+
+  textarea.json-output {
+    width: 100%; height: 300px;
+    background: #060806;
+    border: 1px solid var(--border);
+    color: #a5d6a7;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 12px;
+    resize: vertical;
+    outline: none;
+  }
+
+  /* Welcome screen */
+  .welcome {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 400px; gap: 24px; text-align: center;
+  }
+  .welcome-logo {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 48px;
+    font-weight: 900;
+    color: var(--green-dim);
+    text-shadow: 0 0 40px rgba(76,175,80,0.3);
+    line-height: 1;
+  }
+  .welcome-sub { font-size: 13px; color: var(--text-dim); letter-spacing: 4px; max-width: 400px; }
+  .welcome-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+  /* Copy btn */
+  .copy-flash {
+    animation: flashGreen 0.5s;
+  }
+  @keyframes flashGreen {
+    0% { background: var(--green); color: #000; }
+    100% {}
+  }
+
+  /* Separator */
+  hr.sep { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+  /* Tooltip */
+  .tooltip { position: relative; }
+  .tooltip::after {
+    content: attr(data-tip);
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    background: #1a2a1a; border: 1px solid var(--green-dim);
+    color: var(--text); font-size: 10px; padding: 4px 8px;
+    white-space: nowrap; pointer-events: none;
+    opacity: 0; transition: opacity 0.15s;
+    z-index: 100;
+  }
+  .tooltip:hover::after { opacity: 1; }
+
+  .danger-zone {
+    border: 1px solid #7a1f1a;
+    padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    background: rgba(244,67,54,0.05);
+  }
+  .danger-text { font-size: 12px; color: #ff8a80; }
+
+  /* LABEL */
+  .turret-label-badge {
+    font-size: 11px;
+    color: var(--amber);
+    background: rgba(255,193,7,0.1);
+    border: 1px solid #7a5c00;
+    padding: 2px 8px;
+    letter-spacing: 1px;
+    max-width: 100%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: inline-block;
+    margin-top: 3px;
+  }
+  .label-input-wrap { position: relative; }
+  .label-input-wrap input {
+    padding-right: 36px;
+  }
+  .label-clear {
+    position: absolute; right: 0; top: 0; bottom: 0;
+    background: none; border: none; border-left: 1px solid var(--border);
+    color: var(--text-dim); cursor: pointer; padding: 0 10px;
+    font-size: 13px; transition: color 0.15s;
+  }
+  .label-clear:hover { color: var(--red); }
+
+  @media (max-width: 768px) {
+    .layout { flex-direction: column; }
+    .sidebar { width: 100%; min-width: unset; height: auto; max-height: 200px; }
+    .field-grid, .field-grid-3 { grid-template-columns: 1fr; }
+    .xyz-group { grid-template-columns: 1fr 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="header-icon">🔫</div>
+    <div>
+      <div class="header-title">MECCMAX'S TURRET EDITOR</div>
+      <div class="header-sub">AutomatedTurrets · DayZ Mod</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-green" onclick="saveToServer()" title="Save this config straight to your server (a timestamped backup is kept)">💾 SERVER SAVE</button>
+    <button class="btn btn-ghost" onclick="loadFromServer()" title="Reload the live config from your server (discards unsaved changes)">📥 SERVER LOAD</button>
+    <button class="btn btn-amber" onclick="verifyTurrets()" title="Scan all turrets for problems: unplaced (0,0), zero guard radius / fire rate / hit chance, missing class or ammo, targets nothing, or duplicate positions.">⚠ VERIFY</button>
+    <button class="btn btn-ghost" onclick="newConfig()" title="New Config">⊕ NEW</button>
+    <button class="btn btn-ghost" onclick="triggerFileInput()" title="Load JSON">⬆ LOAD FILE</button>
+    <button class="btn btn-ghost" onclick="showPasteModal()" title="Paste JSON">⎘ PASTE</button>
+    <button class="btn btn-ghost" onclick="openRightPanel('history')" title="Change History">⏱ HISTORY</button>
+    <button class="btn btn-ghost" onclick="openRightPanel('json')" title="Raw JSON + Validator">{ } JSON</button>
+    <button class="btn btn-amber" onclick="triggerOcrInput()" title="Import from Screenshot">📷 OCR IMPORT</button>
+    <button class="btn btn-amber" onclick="triggerDocxInput()" title="Import from Word Doc">📄 DOCX IMPORT</button>
+    <button class="btn btn-amber" onclick="triggerMapInput()" title="Import from .map file">🗺 MAP IMPORT</button>
+    <button class="btn btn-green" onclick="showExport()" title="Export JSON">⬇ EXPORT</button>
+  </div>
+</div>
+<input type="file" id="file-input" accept=".json,application/json,text/plain" style="position:fixed;left:-9999px;opacity:0;width:1px;height:1px;" onchange="loadFile(event)">
+
+<div class="status-bar">
+  <div class="status-item"><div class="status-dot" id="status-dot"></div><span id="status-text">NO CONFIG LOADED</span></div>
+  <div class="status-item">TURRETS: <span id="turret-count" style="color:var(--green-bright)">0</span></div>
+  <div class="status-item">HISTORY: <span id="history-count" style="color:var(--green-bright)">0</span></div>
+  <div class="status-item" id="status-modified" style="display:none;"><div class="status-dot amber"></div><span style="color:var(--amber)">UNSAVED CHANGES</span></div>
+</div>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">TURRET LIST</div>
+      <div class="turret-count" id="sidebar-count">0</div>
+    </div>
+    <div class="turret-list" id="turret-list"></div>
+    <div class="sidebar-footer">
+      <button class="btn btn-green btn-full" onclick="addTurret()" id="add-btn" disabled>⊕ ADD TURRET</button>
+      <button class="btn btn-ghost btn-full" onclick="showGroupModal()" id="group-btn" disabled>⊞ MANAGE GROUPS</button>
+    </div>
+  </div>
+
+  <!-- EDITOR -->
+  <div class="editor" id="editor">
+    <div class="welcome" id="welcome-screen">
+      <div class="welcome-logo">⌖</div>
+      <div style="font-family:'Orbitron',sans-serif;font-size:20px;font-weight:700;color:var(--green-bright);letter-spacing:3px;">AUTOMATED TURRETS</div>
+      <div class="welcome-sub">Load an existing AutomatedTurretsConfig.json or create a new configuration from scratch.</div>
+      <div class="welcome-actions">
+        <button class="btn btn-green" onclick="triggerFileInput()">⬆ LOAD CONFIG FILE</button>
+        <button class="btn btn-ghost" onclick="newConfig()">⊕ CREATE NEW CONFIG</button>
+        <button class="btn btn-ghost" onclick="showPasteModal()">⎘ PASTE JSON</button>
+      </div>
+      <div class="import-area" id="drop-zone" onclick="triggerFileInput()">
+        <div class="import-icon">📂</div>
+        <div class="import-text">DROP JSON FILE HERE</div>
+        <div class="import-hint">AutomatedTurretsConfig.json</div>
+      </div>
+    </div>
+    <div id="turret-editor" style="display:none;"></div>
+    <div id="no-selection" style="display:none;">
+      <div class="no-selection" style="margin-top:80px;">
+        <div class="no-selection-icon">🎯</div>
+        <div class="no-selection-text">SELECT A TURRET</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:8px;">Pick a turret from the list or add a new one</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-overlay" id="export-modal">
+  <div class="modal">
+    <div class="modal-header">
+      EXPORT CONFIG
+      <button class="modal-close" onclick="closeModal('export-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Copy the JSON below or download as file:</p>
+      <textarea class="json-output" id="json-output" readonly></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="copy-btn" onclick="copyJSON()">⎘ COPY</button>
+      <button class="btn btn-green" onclick="downloadJSON()">⬇ DOWNLOAD FILE</button>
+    </div>
+  </div>
+</div>
+
+<!-- VERIFY MODAL -->
+<div class="modal-overlay" id="verify-modal">
+  <div class="modal">
+    <div class="modal-header">
+      ⚠ TURRET VERIFY
+      <button class="modal-close" onclick="closeModal('verify-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="verify-body" style="max-height:60vh;overflow:auto;"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('verify-modal')">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- PANEL OVERLAY -->
+<div class="panel-overlay" id="panel-overlay" onclick="closeRightPanel()"></div>
+
+<!-- RIGHT PANEL -->
+<div class="right-panel" id="right-panel">
+  <div class="right-panel-header">
+    <div style="display:flex;align-items:center;">
+      <div class="right-panel-tabs">
+        <button class="rp-tab active" id="tab-json" onclick="switchRPTab('json')">{ } RAW JSON</button>
+        <button class="rp-tab" id="tab-history" onclick="switchRPTab('history')">⏱ HISTORY</button>
+      </div>
+      <button class="rp-close" onclick="closeRightPanel()">✕</button>
+    </div>
+  </div>
+  <div class="right-panel-body">
+
+    <!-- JSON PANE -->
+    <div class="rp-pane active" id="pane-json">
+      <div class="json-toolbar">
+        <div class="validator-status idle" id="validator-status">
+          <span id="validator-icon">◎</span>
+          <span id="validator-msg">Edit JSON directly or make changes in the editor</span>
+        </div>
+        <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px;" onclick="applyRawJson()">✓ APPLY</button>
+        <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px;" onclick="refreshRawJson()">↺ SYNC</button>
+      </div>
+      <textarea id="raw-json-editor" spellcheck="false" oninput="onRawJsonInput()" onkeydown="handleJsonKeydown(event)"></textarea>
+      <div class="error-detail" id="json-error-detail"></div>
+    </div>
+
+    <!-- HISTORY PANE -->
+    <div class="rp-pane" id="pane-history">
+      <div class="history-toolbar">
+        <span>CHANGE LOG</span>
+        <span id="history-pos-label" style="margin-left:auto;"></span>
+        <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px;margin-left:8px;" onclick="clearHistory()">✕ CLEAR</button>
+      </div>
+      <div class="history-list" id="history-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<input type="file" id="ocr-input" accept="image/*" multiple style="position:fixed;left:-9999px;opacity:0;width:1px;height:1px;" onchange="handleOcrFiles(event)">
+<input type="file" id="docx-input" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="position:fixed;left:-9999px;opacity:0;width:1px;height:1px;" onchange="handleDocxFile(event)">
+<input type="file" id="map-input" accept=".map,.txt,text/plain" multiple style="position:fixed;left:-9999px;opacity:0;width:1px;height:1px;" onchange="handleMapFiles(event)">
+
+<!-- OCR IMPORT MODAL -->
+<div class="modal-overlay" id="ocr-modal">
+  <div class="modal" style="max-width:700px;width:95%;">
+    <div class="modal-header">
+      📷 OCR IMPORT — SCREENSHOT TO TURRET
+      <button class="modal-close" onclick="closeModal('ocr-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:16px;">
+
+      <!-- Drop zone -->
+      <div class="ocr-drop-zone" id="ocr-drop-zone" onclick="triggerOcrInput()">
+        <div style="font-size:28px;margin-bottom:8px;">📷</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">DROP SCREENSHOTS HERE or click to browse</div>
+        <div style="font-size:10px;color:var(--text-dim);opacity:0.6;">Supports PNG, JPG — batch import supported</div>
+      </div>
+
+      <!-- Gemini Vision API key -->
+      <div id="ocr-engine-status" style="background:rgba(76,175,80,0.06);border:1px solid var(--border);padding:7px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+        <span id="ocr-engine-dot" style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;flex-shrink:0;"></span>
+        <span id="ocr-engine-msg" style="font-size:10px;color:var(--text-dim);flex:1;">Google Gemini Vision (free tier)</span>
+        <input type="password" id="ocr-api-key" placeholder="Gemini API key (AIza...)"
+          style="font-size:11px;padding:4px 8px;flex:2;min-width:0;"
+          oninput="saveApiKey(this.value)" autocomplete="off">
+        <a href="https://aistudio.google.com/app/apikey" target="_blank"
+          style="font-size:10px;color:var(--green-bright);white-space:nowrap;text-decoration:none;">Get free key ↗</a>
+      </div>
+
+      <!-- Queue -->
+      <div id="ocr-queue" class="ocr-queue">
+        <div class="ocr-empty" id="ocr-empty-msg">No screenshots added yet.</div>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <div style="font-size:11px;color:var(--text-dim);align-self:center;" id="ocr-summary"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="clearOcrQueue()">✕ CLEAR ALL</button>
+        <button class="btn btn-amber" onclick="importAllOcr()" id="ocr-import-btn">⬇ IMPORT ALL READY</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DOCX IMPORT MODAL -->
+<div class="modal-overlay" id="docx-modal">
+  <div class="modal" style="max-width:700px;width:95%;">
+    <div class="modal-header">
+      📄 DOCX IMPORT — EXTRACT IMAGES FROM WORD DOC
+      <button class="modal-close" onclick="closeModal('docx-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:16px;">
+
+      <!-- Drop zone -->
+      <div class="ocr-drop-zone" id="docx-drop-zone" onclick="triggerDocxInput()">
+        <div style="font-size:28px;margin-bottom:8px;">📄</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">DROP A .DOC OR .DOCX FILE HERE or click to browse</div>
+        <div style="font-size:10px;color:var(--text-dim);opacity:0.6;">All embedded images will be extracted and scanned via OCR</div>
+      </div>
+
+      <!-- Progress / status -->
+      <div id="docx-status" style="font-size:11px;color:var(--text-dim);margin-bottom:12px;min-height:18px;display:flex;align-items:center;gap:8px;">
+        <span id="docx-status-dot" style="width:6px;height:6px;border-radius:50%;background:var(--text-dim);display:inline-block;flex-shrink:0;"></span>
+        <span id="docx-status-msg">No document loaded.</span>
+      </div>
+
+      <!-- Extracted image queue — reuses the same OCR queue rendering -->
+      <div id="docx-queue" class="ocr-queue">
+        <div class="ocr-empty" id="docx-empty-msg">No images extracted yet.</div>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <div style="font-size:11px;color:var(--text-dim);align-self:center;" id="docx-summary"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="clearDocxQueue()">✕ CLEAR</button>
+        <button class="btn btn-amber" onclick="importAllDocx()">⬇ IMPORT ALL READY</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAP IMPORT MODAL -->
+<div class="modal-overlay" id="map-modal">
+  <div class="modal" style="max-width:720px;width:95%;">
+    <div class="modal-header">
+      🗺 MAP IMPORT — IMPORT FROM .MAP FILE
+      <button class="modal-close" onclick="closeModal('map-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:16px;">
+
+      <div class="ocr-drop-zone" id="map-drop-zone" onclick="triggerMapInput()">
+        <div style="font-size:28px;margin-bottom:8px;">🗺</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">DROP .MAP FILES HERE or click to browse</div>
+        <div style="font-size:10px;color:var(--text-dim);opacity:0.6;">Format: ClassName|X Y Z|RotX RotY RotZ — one turret per line</div>
+      </div>
+
+      <!-- Global defaults strip -->
+      <div style="background:var(--card);border:1px solid var(--border);padding:12px 14px;margin-bottom:12px;">
+        <div style="font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-bottom:10px;">DEFAULT SETTINGS APPLIED TO ALL IMPORTED TURRETS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+          <div class="field">
+            <label>Ammo Type</label>
+            <select id="map-ammo">
+              ${AMMO_TYPES ? '' : ''}
+            </select>
+          </div>
+          <div class="field">
+            <label>Guard Radius (m)</label>
+            <input type="number" id="map-radius" value="50" min="1" max="500">
+          </div>
+          <div class="field">
+            <label>RPM</label>
+            <input type="number" id="map-rpm" value="650" min="1" max="6000">
+          </div>
+          <div class="field">
+            <label>Hit Chance (%)</label>
+            <input type="number" id="map-hitchance" value="80" min="0" max="100">
+          </div>
+          <div class="field">
+            <label>Assign Group</label>
+            <select id="map-group"><option value="">— No Group —</option></select>
+          </div>
+          <div class="field">
+            <label>Respawn (sec)</label>
+            <input type="number" id="map-respawn" value="3600" min="0">
+          </div>
+          <div class="field" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <label style="margin:0;">Destructible</label>
+              <input type="checkbox" id="map-destructible" checked style="width:auto;padding:0;border:none;">
+            </div>
+          </div>
+          <div class="field" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <label style="margin:0;">Apply to existing</label>
+              <input type="checkbox" id="map-overwrite" style="width:auto;padding:0;border:none;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview table -->
+      <div id="map-preview-wrap">
+        <div style="font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-bottom:8px;">PARSED TURRETS</div>
+        <div id="map-preview-table" style="overflow-x:auto;">
+          <div class="ocr-empty">No .map file loaded yet.</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <div style="font-size:11px;color:var(--text-dim);align-self:center;" id="map-summary"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="clearMapData()">✕ CLEAR</button>
+        <button class="btn btn-amber" onclick="importMapTurrets()">⬇ IMPORT ALL</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PASTE MODAL -->
+<div class="modal-overlay" id="paste-modal">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-header">
+      PASTE JSON
+      <button class="modal-close" onclick="closeModal('paste-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Paste the contents of your AutomatedTurretsConfig.json here:</p>
+      <textarea class="json-output" id="paste-input" placeholder='{ "Turrets": [ ... ] }' style="height:260px;color:var(--text-bright);"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('paste-modal')">CANCEL</button>
+      <button class="btn btn-green" onclick="loadFromPaste()">⬆ LOAD</button>
+    </div>
+  </div>
+</div>
+
+<!-- GROUP MODAL -->
+<div class="modal-overlay" id="group-modal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      MANAGE GROUPS
+      <button class="modal-close" onclick="closeModal('group-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="group-list-ui"></div>
+      <hr class="sep">
+      <div style="font-size:11px;color:var(--text-dim);letter-spacing:2px;margin-bottom:10px;">CREATE NEW GROUP</div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Group Name</label>
+        <input type="text" id="new-group-name" placeholder='e.g. "North Perimeter"' onkeydown="if(event.key==='Enter')createGroup()">
+      </div>
+      <div class="field">
+        <label>Color</label>
+        <div class="color-picker-row" id="color-picker"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('group-modal')">CLOSE</button>
+      <button class="btn btn-green" onclick="createGroup()">⊕ CREATE GROUP</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== DATA =====================
+const CLASS_NAMES = {
+  "M60E4 Turret - Bottom": ["M60_Turret_Bottom_1000HP","M60_Turret_Bottom_5000HP","M60_Turret_Bottom_10000HP"],
+  "M60E4 Turret - Top": ["M60_Turret_Top_1000HP","M60_Turret_Top_5000HP","M60_Turret_Top_10000HP"],
+  "M134 Minigun - Bottom": ["M134_Turret_Bottom_1000HP","M134_Turret_Bottom_5000HP","M134_Turret_Bottom_10000HP"],
+  "M134 Minigun - Top": ["M134_Turret_Top_1000HP","M134_Turret_Top_5000HP","M134_Turret_Top_10000HP"],
+  "Browning M2HB - Bottom": ["M2_Turret_Bottom_1000HP","M2_Turret_Bottom_5000HP","M2_Turret_Bottom_10000HP"],
+  "Browning M2HB - Top": ["M2_Turret_Top_1000HP","M2_Turret_Top_5000HP","M2_Turret_Top_10000HP"],
+};
+const AMMO_TYPES = [
+  "Bullet_380","Bullet_556x45","Bullet_762x39","Bullet_308Win",
+  "Bullet_9x19","Bullet_45ACP","Bullet_357","Bullet_44Mag",
+  "Bullet_12GASlug","Bullet_12GAShotgun","Bullet_338Lapua"
+];
+
+let config = null;
+let selectedIdx = -1;
+let modified = false;
+
+// ===================== HISTORY =====================
+const MAX_HISTORY = 100;
+let history = [];      // [ { snapshot, action, time } ]
+let historyIdx = -1;   // pointer to current position
+let _suppressSnapshot = false; // prevent snapshot during restore
+
+// Groups are stored in config._groups: [ { id, name, color } ]
+// Each turret has an optional _group field with the group id
+const GROUP_COLORS = [
+  '#e53935','#d81b60','#8e24aa','#3949ab','#1e88e5',
+  '#039be5','#00897b','#43a047','#c0ca33','#fb8c00',
+  '#f4511e','#6d4c41','#546e7a','#00acc1','#7cb342'
+];
+let collapsedGroups = new Set(); // track which folders are collapsed
+let draggedTurretIdx = null; // index of turret currently being dragged
+
+function clearDropHighlights() {
+  document.querySelectorAll('.drag-over, .drag-over-zone').forEach(el => {
+    el.classList.remove('drag-over', 'drag-over-zone');
+  });
+}
+
+function dropTurretIntoGroup(turretIdx, gid) {
+  const grp = gid && groupById(gid);
+  setGroup(config.Turrets[turretIdx], gid);
+  markModified(`Turret #${turretIdx+1} → group "${grp ? grp.name : 'ungrouped'}"`);
+  renderList();
+  if (selectedIdx === turretIdx) showTurretEditor(turretIdx);
+}
+
+function getGroups() { return (config && config._groups) || []; }
+function getLabel(t) { return t._label || ''; }
+function setLabel(t, val) { if (val) t._label = val; else delete t._label; }
+function getGroup(t) { return t._group || ''; }
+function setGroup(t, gid) { if (gid) t._group = gid; else delete t._group; }
+function groupById(id) { return getGroups().find(g => g.id === id); }
+
+// ===================== INIT =====================
+function init() {
+  setupDrag();
+  // When embedded in DZ Forge (served over http), auto-load the live server config.
+  if (location.protocol.startsWith('http')) setTimeout(loadFromServer, 30);
+}
+
+function triggerFileInput() {
+  const el = document.getElementById('file-input');
+  el.value = '';
+  el.click();
+}
+
+function setupDrag() {
+  const dz = document.getElementById('drop-zone');
+  ['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('drag-over'); }));
+  ['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('drag-over'); }));
+  dz.addEventListener('drop', ev => {
+    const f = ev.dataTransfer.files[0];
+    if (f) readFile(f);
+  });
+  // Also on body
+  document.body.addEventListener('dragover', e => e.preventDefault());
+  document.body.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+}
+
+// ===================== FILE I/O =====================
+function loadFile(e) {
+  const f = e.target.files[0];
+  if (f) readFile(f);
+  e.target.value = '';
+}
+function readFile(f) {
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      config = JSON.parse(ev.target.result);
+      if (!config.Turrets) config.Turrets = [];
+      history = []; historyIdx = -1;
+      refreshUI();
+      pushSnapshot('Config loaded: ' + f.name);
+      setStatus('CONFIG LOADED — ' + f.name);
+    } catch(err) {
+      alert('Invalid JSON file: ' + err.message);
+    }
+  };
+  r.readAsText(f);
+}
+function newConfig() {
+  config = { Turrets: [] };
+  selectedIdx = -1;
+  modified = false;
+  history = []; historyIdx = -1;
+  refreshUI();
+  pushSnapshot('New config created');
+  setStatus('NEW CONFIG CREATED');
+}
+
+function showPasteModal() {
+  document.getElementById('paste-input').value = '';
+  document.getElementById('paste-modal').classList.add('show');
+  setTimeout(() => document.getElementById('paste-input').focus(), 100);
+}
+
+function loadFromPaste() {
+  const text = document.getElementById('paste-input').value.trim();
+  if (!text) return;
+  try {
+    config = JSON.parse(text);
+    if (!config.Turrets) config.Turrets = [];
+    history = []; historyIdx = -1;
+    closeModal('paste-modal');
+    refreshUI();
+    pushSnapshot('Config loaded from paste');
+    setStatus('CONFIG LOADED FROM PASTE');
+  } catch(err) {
+    alert('Invalid JSON: ' + err.message);
+  }
+}
+
+// ===================== STATUS =====================
+function setStatus(msg) {
+  document.getElementById('status-text').textContent = msg;
+}
+
+function markModified(action) {
+  modified = true;
+  document.getElementById('status-modified').style.display = 'flex';
+  if (!_suppressSnapshot) pushSnapshot(action || 'Change');
+  // Sync raw JSON pane if open
+  if (document.getElementById('right-panel').classList.contains('open')) {
+    const pane = document.getElementById('pane-json');
+    if (pane.classList.contains('active')) refreshRawJson();
+  }
+}
+
+// ===================== HISTORY =====================
+function pushSnapshot(action) {
+  if (!config) return;
+  const snapshot = JSON.stringify(config);
+  // Truncate any "future" if we branched
+  if (historyIdx < history.length - 1) history = history.slice(0, historyIdx + 1);
+  // Deduplicate: don't push if nothing changed
+  if (history.length > 0 && history[history.length - 1].snapshot === snapshot) return;
+  history.push({ snapshot, action, time: new Date() });
+  if (history.length > MAX_HISTORY) history.shift();
+  historyIdx = history.length - 1;
+  updateHistoryUI();
+}
+
+function restoreSnapshot(idx) {
+  if (idx < 0 || idx >= history.length) return;
+  _suppressSnapshot = true;
+  config = JSON.parse(history[idx].snapshot);
+  historyIdx = idx;
+  modified = true;
+  document.getElementById('status-modified').style.display = 'flex';
+  selectedIdx = Math.min(selectedIdx, config.Turrets.length - 1);
+  refreshUI();
+  updateHistoryUI();
+  if (document.getElementById('pane-json').classList.contains('active')) refreshRawJson();
+  _suppressSnapshot = false;
+  setStatus(`RESTORED TO: ${history[idx].action}`);
+}
+
+function updateHistoryUI() {
+  const count = history.length;
+  document.getElementById('history-count').textContent = count;
+  const label = document.getElementById('history-pos-label');
+  if (label) label.textContent = count ? `${historyIdx + 1} / ${count}` : '';
+  const el = document.getElementById('history-list');
+  if (!el) return;
+  if (!history.length) {
+    el.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-dim);font-size:11px;">No changes recorded yet.</div>`;
+    return;
+  }
+  // Render newest first
+  el.innerHTML = '';
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i];
+    const isCurrent = i === historyIdx;
+    const isFuture = i > historyIdx;
+    const div = document.createElement('div');
+    div.className = `history-entry${isCurrent ? ' current' : ''}${isFuture ? ' future' : ''}`;
+    div.innerHTML = `
+      <div class="history-num">#${i + 1}</div>
+      <div class="history-info">
+        <div class="history-action">${h.action}</div>
+        <div class="history-time">${formatHistoryTime(h.time)}</div>
+      </div>
+      ${isCurrent ? '<span class="history-badge">CURRENT</span>' : `<button class="history-restore-btn" onclick="restoreSnapshot(${i})">RESTORE</button>`}`;
+    el.appendChild(div);
+  }
+}
+
+function clearHistory() {
+  if (!confirm('Clear all history? This cannot be undone.')) return;
+  history = [];
+  historyIdx = -1;
+  updateHistoryUI();
+}
+
+function formatHistoryTime(d) {
+  const now = new Date();
+  const diff = Math.floor((now - d) / 1000);
+  if (diff < 5) return 'just now';
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  return d.toLocaleTimeString();
+}
+
+// ===================== RIGHT PANEL =====================
+let rightPanelOpen = false;
+
+function openRightPanel(tab) {
+  switchRPTab(tab);
+  document.getElementById('right-panel').classList.add('open');
+  document.getElementById('panel-overlay').classList.add('show');
+  rightPanelOpen = true;
+  if (tab === 'json') refreshRawJson();
+  if (tab === 'history') updateHistoryUI();
+}
+
+function closeRightPanel() {
+  document.getElementById('right-panel').classList.remove('open');
+  document.getElementById('panel-overlay').classList.remove('show');
+  rightPanelOpen = false;
+}
+
+function switchRPTab(tab) {
+  document.querySelectorAll('.rp-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.rp-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.getElementById(`pane-${tab}`).classList.add('active');
+  if (tab === 'json') refreshRawJson();
+  if (tab === 'history') updateHistoryUI();
+}
+
+// ===================== RAW JSON + VALIDATOR =====================
+let _jsonSyncTimer = null;
+
+function refreshRawJson() {
+  if (!config) return;
+  const ta = document.getElementById('raw-json-editor');
+  if (!ta) return;
+  const pos = ta.selectionStart;
+  ta.value = JSON.stringify(config, null, 2);
+  try { ta.setSelectionRange(pos, pos); } catch(e) {}
+  setValidatorStatus('valid', '✓', 'JSON is valid');
+  ta.classList.remove('has-error');
+  document.getElementById('json-error-detail').classList.remove('show');
+}
+
+function onRawJsonInput() {
+  clearTimeout(_jsonSyncTimer);
+  _jsonSyncTimer = setTimeout(validateRawJson, 400);
+}
+
+function validateRawJson() {
+  const ta = document.getElementById('raw-json-editor');
+  const text = ta.value.trim();
+  if (!text) return;
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed.Turrets || !Array.isArray(parsed.Turrets)) {
+      setValidatorStatus('invalid', '✕', 'Missing "Turrets" array');
+      ta.classList.add('has-error');
+      showJsonError('Root object must have a "Turrets" array.');
+      return;
+    }
+    setValidatorStatus('valid', '✓', `Valid — ${parsed.Turrets.length} turret${parsed.Turrets.length !== 1 ? 's' : ''} detected`);
+    ta.classList.remove('has-error');
+    document.getElementById('json-error-detail').classList.remove('show');
+  } catch(e) {
+    setValidatorStatus('invalid', '✕', 'JSON syntax error');
+    ta.classList.add('has-error');
+    showJsonError(e.message);
+  }
+}
+
+function applyRawJson() {
+  const ta = document.getElementById('raw-json-editor');
+  const text = ta.value.trim();
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed.Turrets || !Array.isArray(parsed.Turrets)) {
+      showJsonError('Cannot apply: missing "Turrets" array.');
+      setValidatorStatus('invalid', '✕', 'Missing "Turrets" array');
+      return;
+    }
+    config = parsed;
+    selectedIdx = Math.min(selectedIdx, config.Turrets.length - 1);
+    markModified('Applied raw JSON edit');
+    refreshUI();
+    setValidatorStatus('valid', '✓', 'Applied successfully');
+    setStatus('RAW JSON APPLIED');
+  } catch(e) {
+    showJsonError('Cannot apply: ' + e.message);
+    setValidatorStatus('invalid', '✕', 'JSON syntax error');
+  }
+}
+
+function handleJsonKeydown(e) {
+  // Tab key inserts 2 spaces
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const ta = e.target;
+    const s = ta.selectionStart, en = ta.selectionEnd;
+    ta.value = ta.value.substring(0, s) + '  ' + ta.value.substring(en);
+    ta.selectionStart = ta.selectionEnd = s + 2;
+    onRawJsonInput();
+  }
+  // Ctrl+Enter applies
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') applyRawJson();
+}
+
+function setValidatorStatus(type, icon, msg) {
+  const el = document.getElementById('validator-status');
+  el.className = `validator-status ${type}`;
+  document.getElementById('validator-icon').textContent = icon;
+  document.getElementById('validator-msg').textContent = msg;
+}
+
+function showJsonError(msg) {
+  const el = document.getElementById('json-error-detail');
+  el.textContent = '⚠ ' + msg;
+  el.classList.add('show');
+}
+
+// ===================== UI REFRESH =====================
+function refreshUI() {
+  document.getElementById('welcome-screen').style.display = 'none';
+  document.getElementById('add-btn').disabled = false;
+  document.getElementById('group-btn').disabled = false;
+  const count = config.Turrets.length;
+  document.getElementById('turret-count').textContent = count;
+  document.getElementById('sidebar-count').textContent = count;
+  renderList();
+  if (selectedIdx >= 0 && selectedIdx < count) {
+    showTurretEditor(selectedIdx);
+  } else {
+    selectedIdx = -1;
+    document.getElementById('turret-editor').style.display = 'none';
+    document.getElementById('no-selection').style.display = 'block';
+  }
+}
+
+// ===================== SIDEBAR =====================
+function renderList() {
+  const el = document.getElementById('turret-list');
+  el.innerHTML = '';
+  if (!config) return;
+
+  const groups = getGroups();
+  const turrets = config.Turrets;
+
+  // Build group buckets
+  const buckets = {};
+  const ungrouped = [];
+  turrets.forEach((t, i) => {
+    const gid = getGroup(t);
+    const grp = gid && groupById(gid);
+    if (grp) {
+      if (!buckets[gid]) buckets[gid] = [];
+      buckets[gid].push(i);
+    } else {
+      ungrouped.push(i);
+    }
+  });
+
+  // Render each group folder
+  groups.forEach(grp => {
+    const members = buckets[grp.id] || [];
+    const isOpen = !collapsedGroups.has(grp.id);
+
+    const folder = document.createElement('div');
+    folder.className = 'group-folder';
+
+    // Header — also acts as drop target
+    const header = document.createElement('div');
+    header.className = 'group-folder-header';
+    header.innerHTML = `
+      <span class="group-folder-icon ${isOpen ? 'open' : ''}">▶</span>
+      <span class="group-color-dot" style="background:${grp.color}"></span>
+      <span class="group-folder-name">${grp.name}</span>
+      <span class="group-folder-count">${members.length}</span>
+      <span class="group-folder-actions" onclick="event.stopPropagation()">
+        <button class="group-action-btn" onclick="renameGroup('${grp.id}')" title="Rename">✎</button>
+        <button class="group-action-btn del" onclick="deleteGroup('${grp.id}')" title="Delete group">✕</button>
+      </span>`;
+    header.addEventListener('click', () => toggleGroupFolder(grp.id));
+
+    // Drop onto header → assign to group
+    header.addEventListener('dragover', e => {
+      if (draggedTurretIdx === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      header.classList.add('drag-over');
+      // Auto-open collapsed folders on hover
+      if (collapsedGroups.has(grp.id)) {
+        collapsedGroups.delete(grp.id);
+        renderList();
+      }
+    });
+    header.addEventListener('dragleave', e => {
+      if (!header.contains(e.relatedTarget)) header.classList.remove('drag-over');
+    });
+    header.addEventListener('drop', e => {
+      e.preventDefault();
+      header.classList.remove('drag-over');
+      if (draggedTurretIdx !== null) dropTurretIntoGroup(draggedTurretIdx, grp.id);
+    });
+
+    // Turret container
+    const turretContainer = document.createElement('div');
+    turretContainer.className = 'group-turrets' + (isOpen ? ' open' : '');
+    turretContainer.id = `gturrets-${grp.id}`;
+
+    // Drop onto turret container body (empty space in folder)
+    turretContainer.addEventListener('dragover', e => {
+      if (draggedTurretIdx === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      turretContainer.classList.add('drag-over-zone');
+    });
+    turretContainer.addEventListener('dragleave', e => {
+      if (!turretContainer.contains(e.relatedTarget)) turretContainer.classList.remove('drag-over-zone');
+    });
+    turretContainer.addEventListener('drop', e => {
+      e.preventDefault();
+      turretContainer.classList.remove('drag-over-zone');
+      if (draggedTurretIdx !== null) dropTurretIntoGroup(draggedTurretIdx, grp.id);
+    });
+
+    members.forEach(i => turretContainer.appendChild(makeTurretItem(turrets[i], i, grp.color)));
+
+    folder.appendChild(header);
+    folder.appendChild(turretContainer);
+    el.appendChild(folder);
+  });
+
+  // Render ungrouped section
+  if (ungrouped.length > 0 || groups.length > 0) {
+    if (groups.length > 0) {
+      const hdr = document.createElement('div');
+      hdr.className = 'ungrouped-header';
+      hdr.textContent = 'UNGROUPED';
+      // Drop onto ungrouped header → remove from group
+      hdr.addEventListener('dragover', e => {
+        if (draggedTurretIdx === null) return;
+        e.preventDefault();
+        hdr.classList.add('drag-over');
+      });
+      hdr.addEventListener('dragleave', () => hdr.classList.remove('drag-over'));
+      hdr.addEventListener('drop', e => {
+        e.preventDefault();
+        hdr.classList.remove('drag-over');
+        if (draggedTurretIdx !== null) dropTurretIntoGroup(draggedTurretIdx, '');
+      });
+      el.appendChild(hdr);
+    }
+    ungrouped.forEach(i => el.appendChild(makeTurretItem(turrets[i], i, null)));
+  }
+}
+
+function makeTurretItem(t, i, groupColor) {
+  const div = document.createElement('div');
+  div.className = 'turret-item' + (i === selectedIdx ? ' active' : '');
+  div.draggable = true;
+  div.dataset.turretIdx = i;
+
+  const cn = t.m_sTurretClassName || 'Unnamed';
+  const pos = t.m_vTurretPosition || [0,0,0];
+  const hp = cn.includes('10000') ? '10K HP' : cn.includes('5000') ? '5K HP' : '1K HP';
+  const hpClass = cn.includes('10000') ? 'red' : cn.includes('5000') ? 'amber' : 'green';
+  const type = cn.includes('M134') ? 'M134' : cn.includes('M2_') ? 'M2HB' : 'M60';
+  const mount = cn.includes('Top') ? 'TOP' : 'BOT';
+  const label = getLabel(t);
+
+  div.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:4px;">
+      <span class="drag-handle" title="Drag to group">⠿</span>
+      <div style="flex:1;min-width:0;">
+        <div class="turret-item-name">#${i+1} · ${label ? label : cn}</div>
+        ${label ? `<div class="turret-label-badge" style="font-size:9px;padding:1px 6px;margin-bottom:3px;">${cn}</div>` : ''}
+        <div class="turret-item-meta">
+          <span class="tag">${type}</span>
+          <span class="tag">${mount}</span>
+          <span class="tag ${hpClass}">${hp}</span>
+          <span style="margin-left:auto;font-size:9px;opacity:0.6">${pos[0].toFixed(0)},${pos[2].toFixed(0)}</span>
+        </div>
+      </div>
+    </div>`;
+
+  if (groupColor) div.style.borderLeft = `3px solid ${i === selectedIdx ? 'var(--green)' : groupColor}`;
+
+  // Click to select (only if not dragging)
+  div.addEventListener('click', () => selectTurret(i));
+
+  // Drag events
+  div.addEventListener('dragstart', e => {
+    draggedTurretIdx = i;
+    div.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(i));
+  });
+  div.addEventListener('dragend', () => {
+    draggedTurretIdx = null;
+    div.classList.remove('dragging');
+    clearDropHighlights();
+  });
+
+  return div;
+}
+
+function toggleGroupFolder(gid) {
+  if (collapsedGroups.has(gid)) collapsedGroups.delete(gid);
+  else collapsedGroups.add(gid);
+  renderList();
+}
+
+function selectTurret(i) {
+  selectedIdx = i;
+  renderList();
+  showTurretEditor(i);
+}
+
+// ===================== TURRET EDITOR =====================
+function showTurretEditor(i) {
+  const t = config.Turrets[i];
+  document.getElementById('no-selection').style.display = 'none';
+  const ed = document.getElementById('turret-editor');
+  ed.style.display = 'block';
+  ed.innerHTML = buildEditor(t, i);
+  attachEvents(i);
+}
+
+function buildEditor(t, i) {
+  const pos = t.m_vTurretPosition || [0,0,0];
+  const rot = t.m_vTurretRotation || [0,0,0];
+
+  // Build class select options
+  let classOpts = '';
+  for (const [group, names] of Object.entries(CLASS_NAMES)) {
+    classOpts += `<optgroup label="── ${group} ──">`;
+    names.forEach(n => { classOpts += `<option value="${n}" ${n===t.m_sTurretClassName?'selected':''}>${n}</option>`; });
+    classOpts += '</optgroup>';
+  }
+  // Fallback if current not in list
+  if (t.m_sTurretClassName && !Object.values(CLASS_NAMES).flat().includes(t.m_sTurretClassName)) {
+    classOpts = `<option value="${t.m_sTurretClassName}" selected>${t.m_sTurretClassName} (custom)</option>` + classOpts;
+  }
+
+  // Ammo options
+  let ammoOpts = AMMO_TYPES.map(a => `<option value="${a}" ${a===t.m_sTurretAmmoClassName?'selected':''}>${a}</option>`).join('');
+  if (t.m_sTurretAmmoClassName && !AMMO_TYPES.includes(t.m_sTurretAmmoClassName)) {
+    ammoOpts = `<option value="${t.m_sTurretAmmoClassName}" selected>${t.m_sTurretAmmoClassName} (custom)</option>` + ammoOpts;
+  }
+
+  return `
+    <div class="turret-editor-header">
+      <div class="turret-editor-index">#${String(i+1).padStart(2,'0')}</div>
+      <div style="min-width:0;flex:1;">
+        <div class="turret-editor-title">${getLabel(t) || t.m_sTurretClassName || 'Unnamed Turret'}</div>
+        ${getLabel(t) ? `<div style="font-size:10px;color:var(--text-dim);margin-top:1px;">${t.m_sTurretClassName || ''}</div>` : ''}
+        <div class="turret-editor-sub">TURRET CONFIG · SLOT ${i+1} OF ${config.Turrets.length}</div>
+      </div>
+    </div>
+
+    <!-- IDENTITY -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        ⬡ IDENTITY &amp; CLASS <span class="chevron open">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="field" style="margin-bottom:14px;">
+          <label>Friendly Label <span style="color:var(--amber);font-size:9px;margin-left:6px;">EDITOR ONLY — NOT EXPORTED</span></label>
+          <div class="label-hint" style="margin-bottom:6px;">Give this turret a human-readable name, e.g. "DNA Room Blue Turret North"</div>
+          <div class="label-input-wrap">
+            <input type="text" placeholder='e.g. "DNA Room Blue Turret North"'
+              value="${getLabel(t).replace(/"/g,'&quot;')}"
+              oninput="labelChange(${i}, this.value)"
+              style="border-color:${getLabel(t) ? 'var(--amber)' : 'var(--border)'};">
+            ${getLabel(t) ? `<button class="label-clear" onclick="labelChange(${i},'');document.querySelector('#editor input[placeholder]').value='';renderList();" title="Clear label">✕</button>` : ''}
+          </div>
+        </div>
+        <div class="field">
+          <label>Turret Class Name</label>
+          <select id="f_className" onchange="fieldChange(${i},'m_sTurretClassName',this.value)">
+            ${classOpts}
+          </select>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Group <span style="color:var(--text-dim);font-size:9px;margin-left:6px;">SAVED IN FILE — IGNORED BY MOD</span></label>
+          <select onchange="groupChange(${i}, this.value)" style="border-color:${getGroup(t) ? (groupById(getGroup(t)) ? groupById(getGroup(t)).color : 'var(--border)') : 'var(--border)'}">
+            <option value="">— No Group —</option>
+            ${getGroups().map(g => `<option value="${g.id}" ${getGroup(t)===g.id?'selected':''}>${g.name}</option>`).join('')}
+          </select>
+          ${getGroups().length === 0 ? `<div class="label-hint">No groups yet — create one via <strong style="color:var(--green-dim)">MANAGE GROUPS</strong> in the sidebar.</div>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <!-- POSITION -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        ⬡ POSITION &amp; ROTATION <span class="chevron open">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="field" style="margin-bottom:12px;">
+          <label>Position (X / Y / Z)</label>
+          <div class="label-hint">World coordinates in DayZ map units</div>
+          <div class="xyz-group" style="margin-top:6px;">
+            <div>
+              <div class="xyz-label"><span class="xyz-x">X</span> (East/West)</div>
+              <input type="number" step="0.001" value="${pos[0]}" onchange="vecChange(${i},'m_vTurretPosition',0,this.value)">
+            </div>
+            <div>
+              <div class="xyz-label"><span class="xyz-y">Y</span> (Height)</div>
+              <input type="number" step="0.001" value="${pos[1]}" onchange="vecChange(${i},'m_vTurretPosition',1,this.value)">
+            </div>
+            <div>
+              <div class="xyz-label"><span class="xyz-z">Z</span> (North/South)</div>
+              <input type="number" step="0.001" value="${pos[2]}" onchange="vecChange(${i},'m_vTurretPosition',2,this.value)">
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Rotation (X / Y / Z)</label>
+          <div class="label-hint">Yaw/Pitch/Roll in degrees</div>
+          <div class="xyz-group" style="margin-top:6px;">
+            <div>
+              <div class="xyz-label"><span class="xyz-x">X</span> (Yaw)</div>
+              <input type="number" step="0.001" value="${rot[0]}" onchange="vecChange(${i},'m_vTurretRotation',0,this.value)">
+            </div>
+            <div>
+              <div class="xyz-label"><span class="xyz-y">Y</span> (Pitch)</div>
+              <input type="number" step="0.001" value="${rot[1]}" onchange="vecChange(${i},'m_vTurretRotation',1,this.value)">
+            </div>
+            <div>
+              <div class="xyz-label"><span class="xyz-z">Z</span> (Roll)</div>
+              <input type="number" step="0.001" value="${rot[2]}" onchange="vecChange(${i},'m_vTurretRotation',2,this.value)">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMBAT -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        ⬡ COMBAT SETTINGS <span class="chevron open">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="field-grid" style="margin-bottom:16px;">
+          <div class="field">
+            <label>Ammo Type</label>
+            <select id="f_ammo" onchange="fieldChange(${i},'m_sTurretAmmoClassName',this.value)">
+              ${ammoOpts}
+            </select>
+          </div>
+          <div class="field">
+            <label>Guard / Search Radius (m)</label>
+            <div class="range-row">
+              <input type="range" min="10" max="500" step="1" value="${t.m_fTurretGuardRadius||50}" 
+                oninput="this.nextElementSibling.textContent=this.value;fieldChange(${i},'m_fTurretGuardRadius',parseFloat(this.value))">
+              <span class="range-val">${t.m_fTurretGuardRadius||50}</span>
+            </div>
+          </div>
+        </div>
+        <div class="field-grid">
+          <div class="field">
+            <label>Fire Rate (RPM)</label>
+            <div class="range-row">
+              <input type="range" min="1" max="6000" step="1" value="${t.m_nTurretShootingRPM||60}"
+                oninput="this.nextElementSibling.textContent=this.value;fieldChange(${i},'m_nTurretShootingRPM',parseInt(this.value))">
+              <span class="range-val">${t.m_nTurretShootingRPM||60}</span>
+            </div>
+            <div class="label-hint">RPM 60 = 1 round/sec</div>
+          </div>
+          <div class="field">
+            <label>Hit Chance (%)</label>
+            <div class="range-row">
+              <input type="range" min="0" max="100" step="1" value="${t.m_nTurretHitChance||80}"
+                oninput="this.nextElementSibling.textContent=this.value+'%';fieldChange(${i},'m_nTurretHitChance',parseInt(this.value))">
+              <span class="range-val">${t.m_nTurretHitChance||80}%</span>
+            </div>
+          </div>
+        </div>
+        <hr class="sep">
+        <div class="toggle-row">
+          <span class="toggle-label">💥 Explosive Rounds</span>
+          <label class="toggle">
+            <input type="checkbox" ${t.m_bTurretExplosiveRounds?'checked':''} onchange="fieldChange(${i},'m_bTurretExplosiveRounds',this.checked?1:0)">
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- BEHAVIOR -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        ⬡ BEHAVIOR &amp; SURVIVAL <span class="chevron open">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="toggle-row" style="margin-bottom:12px;">
+          <span class="toggle-label">👁 Idle Scan (left/right sweep when no target)</span>
+          <label class="toggle">
+            <input type="checkbox" id="f_canIdle" ${t.m_bTurretCanIdle?'checked':''} onchange="toggleIdle(${i},this.checked)">
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+        <div id="idle-angle-block" style="${t.m_bTurretCanIdle?'':'opacity:0.3;pointer-events:none'}">
+          <div class="field">
+            <label>Max Idle Scan Angle (°)</label>
+            <div class="range-row">
+              <input type="range" min="0" max="180" step="1" value="${t.m_fTurretMaxIdleAngle||45}"
+                oninput="this.nextElementSibling.textContent=this.value+'°';fieldChange(${i},'m_fTurretMaxIdleAngle',parseFloat(this.value))">
+              <span class="range-val">${t.m_fTurretMaxIdleAngle||45}°</span>
+            </div>
+          </div>
+        </div>
+        <hr class="sep">
+        <div class="toggle-row" style="margin-bottom:12px;">
+          <span class="toggle-label">🔧 Can Be Destroyed</span>
+          <label class="toggle">
+            <input type="checkbox" id="f_canDestroy" ${t.m_bTurretCanBeDestroyed?'checked':''} onchange="toggleDestroy(${i},this.checked)">
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+        <div id="respawn-block" style="${t.m_bTurretCanBeDestroyed?'':'opacity:0.3;pointer-events:none'}">
+          <div class="field">
+            <label>Respawn Time (seconds)</label>
+            <div class="label-hint">0 = does not respawn</div>
+            <div class="range-row">
+              <input type="range" min="0" max="86400" step="60" value="${t.m_nTurretTimeToRespawn||3600}"
+                oninput="this.nextElementSibling.textContent=formatTime(parseInt(this.value));fieldChange(${i},'m_nTurretTimeToRespawn',parseInt(this.value))">
+              <span class="range-val">${formatTime(t.m_nTurretTimeToRespawn||3600)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TARGETS -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        ⬡ TARGET RULES <span class="chevron open">▾</span>
+      </div>
+      <div class="section-body">
+        ${buildTargetEditor('Players', i, t.m_aTurretTargetsPlayers || ['ALL'], 'aTurretTargetsPlayers', '👤', true)}
+        <hr class="sep">
+        ${buildTargetEditor('Zombies', i, t.m_aTurretTargetsZombies || ['ALL'], 'aTurretTargetsZombies', '🧟', false)}
+        <hr class="sep">
+        ${buildTargetEditor('Animals', i, t.m_aTurretTargetsAnimals || ['NONE'], 'aTurretTargetsAnimals', '🐺', false)}
+        <hr class="sep">
+        ${buildTargetEditor('Vehicles', i, t.m_aTurretTargetsVehicles || ['NONE'], 'aTurretTargetsVehicles', '🚗', false, true)}
+      </div>
+    </div>
+
+    <!-- DANGER ZONE -->
+    <div class="section" style="border-color:#7a1f1a;">
+      <div class="section-header" style="background:rgba(244,67,54,0.06);border-color:#7a1f1a;color:#ff8a80;" onclick="toggleSection(this)">
+        ⚠ DANGER ZONE <span class="chevron open">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="danger-zone">
+          <div class="danger-text">Duplicate this turret with the same settings</div>
+          <button class="btn btn-amber" onclick="duplicateTurret(${i})">⎘ DUPLICATE</button>
+        </div>
+        <div class="danger-zone" style="margin-top:8px;">
+          <div class="danger-text">Permanently remove this turret from the config</div>
+          <button class="btn btn-red" onclick="deleteTurret(${i})">✕ DELETE TURRET</button>
+        </div>
+      </div>
+    </div>
+    <div style="height:40px;"></div>
+  `;
+}
+
+function buildTargetEditor(label, turretIdx, arr, key, icon, isPlayers, isVehicle) {
+  const hasAll = arr.includes('ALL');
+  const hasNone = arr.includes('NONE');
+  const hasReverse = arr.includes('REVERSE');
+  const hasIgnore = isVehicle && arr.includes('IGNORE PLAYERS LIST');
+  
+  const entries = arr.filter(v => !['ALL','NONE','REVERSE','IGNORE PLAYERS LIST'].includes(v));
+  
+  let mode = 'ALL';
+  if (hasNone) mode = 'NONE';
+  else if (hasReverse) mode = 'REVERSE';
+  else if (!hasAll && entries.length > 0) mode = 'SPECIFIC';
+
+  const entriesHTML = entries.map((v, ei) => `
+    <div class="entry-row">
+      <input class="entry-input" type="text" value="${v}" 
+        onchange="entryChange(${turretIdx},'m_${key}',${arr.indexOf(v)},this.value)">
+      <button class="entry-del" onclick="entryDelete(${turretIdx},'m_${key}',${arr.indexOf(v)})">✕</button>
+    </div>`).join('');
+
+  const showEntries = (mode === 'SPECIFIC' || mode === 'REVERSE') ? '' : 'display:none';
+  const reverseFlag = mode === 'REVERSE' ? `<div class="reverse-flag">⚠ REVERSE MODE — Listed items will NOT be targets; all others WILL</div>` : '';
+
+  return `
+    <div class="target-section">
+      <div class="target-title"><span class="target-title-icon">${icon}</span> ${label.toUpperCase()} TARGETS</div>
+      <div class="target-mode-row">
+        <button class="mode-btn ${mode==='ALL'?'active':''}" onclick="setTargetMode(${turretIdx},'m_${key}','ALL',this)">ALL</button>
+        <button class="mode-btn ${mode==='NONE'?'active-none':''}" onclick="setTargetMode(${turretIdx},'m_${key}','NONE',this)">NONE</button>
+        <button class="mode-btn ${mode==='SPECIFIC'?'active':''}" onclick="setTargetMode(${turretIdx},'m_${key}','SPECIFIC',this)">SPECIFIC LIST</button>
+        <button class="mode-btn ${mode==='REVERSE'?'active-rev':''}" onclick="setTargetMode(${turretIdx},'m_${key}','REVERSE',this)">REVERSE LIST</button>
+        ${isVehicle ? `<button class="mode-btn ${hasIgnore?'active-rev':''}" id="ignore-btn-${turretIdx}" onclick="toggleIgnorePlayers(${turretIdx})" style="font-size:9px;">IGNORE PLAYERS LIST</button>` : ''}
+      </div>
+      <div id="entries-${turretIdx}-${key}" style="${showEntries}">
+        ${reverseFlag}
+        <div class="entry-list" id="entrylist-${turretIdx}-${key}">${entriesHTML}</div>
+        <button class="add-entry" onclick="entryAdd(${turretIdx},'m_${key}')">+ ADD ENTRY</button>
+      </div>
+    </div>
+  `;
+}
+
+function attachEvents(i) {
+  // nothing extra needed; inline handlers cover it
+}
+
+// ===================== FIELD CHANGES =====================
+function labelChange(i, val) {
+  setLabel(config.Turrets[i], val.trim());
+  markModified(`Label turret #${i+1}: "${val.trim() || 'cleared'}"`);
+  const titleEl = document.querySelector('.turret-editor-title');
+  if (titleEl) titleEl.textContent = val.trim() || config.Turrets[i].m_sTurretClassName || 'Unnamed Turret';
+  // Update border color of the input to amber when filled
+  const inp = document.querySelector('#editor .label-input-wrap input');
+  if (inp) inp.style.borderColor = val.trim() ? 'var(--amber)' : 'var(--border)';
+  renderList();
+}
+
+function fieldChange(i, key, val) {
+  config.Turrets[i][key] = val;
+  markModified(`Edit turret #${i+1}: ${key.replace('m_s','').replace('m_n','').replace('m_f','').replace('m_b','')} = ${val}`);
+  // Refresh sidebar name if class changed
+  if (key === 'm_sTurretClassName') {
+    renderList();
+    // Update title
+    const titleEl = document.querySelector('.turret-editor-title');
+    if (titleEl) titleEl.textContent = val;
+  }
+}
+
+function vecChange(i, key, axis, val) {
+  if (!config.Turrets[i][key]) config.Turrets[i][key] = [0,0,0];
+  config.Turrets[i][key][axis] = parseFloat(val) || 0;
+  markModified(`Edit turret #${i+1}: ${key.includes('Position') ? 'position' : 'rotation'} axis ${['X','Y','Z'][axis]} = ${val}`);
+}
+
+function toggleIdle(i, checked) {
+  config.Turrets[i].m_bTurretCanIdle = checked ? 1 : 0;
+  const block = document.getElementById('idle-angle-block');
+  if (block) block.style.cssText = checked ? '' : 'opacity:0.3;pointer-events:none';
+  markModified(`Turret #${i+1}: idle scan ${checked ? 'ON' : 'OFF'}`);
+}
+function toggleDestroy(i, checked) {
+  config.Turrets[i].m_bTurretCanBeDestroyed = checked ? 1 : 0;
+  const block = document.getElementById('respawn-block');
+  if (block) block.style.cssText = checked ? '' : 'opacity:0.3;pointer-events:none';
+  markModified(`Turret #${i+1}: destructible ${checked ? 'ON' : 'OFF'}`);
+}
+
+// ===================== TARGET EDITING =====================
+function setTargetMode(turretIdx, key, mode, btn) {
+  const t = config.Turrets[turretIdx];
+  const full_key = key; // already has m_ prefix
+  const arr = t[full_key] || [];
+  
+  // Remove mode flags
+  const filtered = arr.filter(v => !['ALL','NONE','REVERSE'].includes(v));
+  
+  // Add IGNORE PLAYERS LIST back if it was there
+  const hasIgnore = arr.includes('IGNORE PLAYERS LIST');
+  
+  let newArr;
+  if (mode === 'ALL') newArr = ['ALL'];
+  else if (mode === 'NONE') newArr = ['NONE'];
+  else if (mode === 'SPECIFIC') newArr = [...filtered];
+  else if (mode === 'REVERSE') newArr = ['REVERSE', ...filtered];
+  
+  if (hasIgnore && full_key === 'm_aTurretTargetsVehicles') {
+    newArr = ['IGNORE PLAYERS LIST', ...newArr.filter(v => v !== 'IGNORE PLAYERS LIST')];
+  }
+  
+  t[full_key] = newArr;
+  markModified(`Turret #${turretIdx+1}: ${key} mode → ${mode}`);
+  
+  // Re-render just the target section
+  showTurretEditor(turretIdx);
+}
+
+function toggleIgnorePlayers(turretIdx) {
+  const arr = config.Turrets[turretIdx].m_aTurretTargetsVehicles || [];
+  const has = arr.includes('IGNORE PLAYERS LIST');
+  if (has) {
+    config.Turrets[turretIdx].m_aTurretTargetsVehicles = arr.filter(v => v !== 'IGNORE PLAYERS LIST');
+  } else {
+    config.Turrets[turretIdx].m_aTurretTargetsVehicles = ['IGNORE PLAYERS LIST', ...arr];
+  }
+  markModified(`Turret #${turretIdx+1}: vehicles ignore players list toggled`);
+  showTurretEditor(turretIdx);
+}
+
+function entryChange(turretIdx, key, idx, val) {
+  config.Turrets[turretIdx][key][idx] = val;
+  markModified(`Turret #${turretIdx+1}: target entry updated`);
+}
+function entryDelete(turretIdx, key, idx) {
+  config.Turrets[turretIdx][key].splice(idx, 1);
+  markModified(`Turret #${turretIdx+1}: target entry removed`);
+  showTurretEditor(turretIdx);
+}
+function entryAdd(turretIdx, key) {
+  if (!config.Turrets[turretIdx][key]) config.Turrets[turretIdx][key] = [];
+  config.Turrets[turretIdx][key].push('');
+  markModified(`Turret #${turretIdx+1}: target entry added`);
+  showTurretEditor(turretIdx);
+}
+
+// ===================== TURRET MGMT =====================
+function addTurret() {
+  const t = {
+    m_sTurretClassName: "M60_Turret_Bottom_1000HP",
+    m_vTurretPosition: [0, 0, 0],
+    m_vTurretRotation: [0, 0, 0],
+    m_fTurretGuardRadius: 50,
+    m_sTurretAmmoClassName: "Bullet_556x45",
+    m_nTurretShootingRPM: 650,
+    m_nTurretHitChance: 80,
+    m_bTurretExplosiveRounds: 0,
+    m_bTurretCanIdle: 1,
+    m_fTurretMaxIdleAngle: 45,
+    m_bTurretCanBeDestroyed: 1,
+    m_nTurretTimeToRespawn: 3600,
+    m_aTurretTargetsPlayers: ["ALL"],
+    m_aTurretTargetsZombies: ["ALL"],
+    m_aTurretTargetsAnimals: ["NONE"],
+    m_aTurretTargetsVehicles: ["NONE"]
+  };
+  config.Turrets.push(t);
+  selectedIdx = config.Turrets.length - 1;
+  markModified(`Added turret #${selectedIdx+1}`);
+  refreshUI();
+  const list = document.getElementById('turret-list');
+  list.scrollTop = list.scrollHeight;
+}
+
+function duplicateTurret(i) {
+  const clone = JSON.parse(JSON.stringify(config.Turrets[i]));
+  config.Turrets.splice(i + 1, 0, clone);
+  selectedIdx = i + 1;
+  markModified(`Duplicated turret #${i+1} → #${i+2}`);
+  refreshUI();
+}
+
+function deleteTurret(i) {
+  if (!confirm(`Delete Turret #${i+1} (${config.Turrets[i].m_sTurretClassName})?`)) return;
+  const name = config.Turrets[i].m_sTurretClassName;
+  config.Turrets.splice(i, 1);
+  selectedIdx = Math.min(selectedIdx, config.Turrets.length - 1);
+  if (config.Turrets.length === 0) selectedIdx = -1;
+  markModified(`Deleted turret #${i+1} (${name})`);
+  refreshUI();
+}
+
+// ===================== EXPORT =====================
+function showExport() {
+  if (!config) { alert('No config loaded.'); return; }
+  const json = JSON.stringify(config, null, 2);
+  document.getElementById('json-output').value = json;
+  document.getElementById('export-modal').classList.add('show');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+function copyJSON() {
+  const text = document.getElementById('json-output').value;
+  navigator.clipboard.writeText(text).catch(() => {
+    const ta = document.getElementById('json-output'); ta.select(); document.execCommand('copy');
+  });
+  const btn = document.getElementById('copy-btn');
+  btn.textContent = '✓ COPIED';
+  btn.classList.add('copy-flash');
+  setTimeout(() => { btn.textContent = '⎘ COPY'; btn.classList.remove('copy-flash'); }, 1500);
+}
+function downloadJSON() {
+  const json = document.getElementById('json-output').value;
+  const blob = new Blob([json], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'AutomatedTurretsConfig.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ===================== SECTION TOGGLE =====================
+function toggleSection(header) {
+  const body = header.nextElementSibling;
+  const chev = header.querySelector('.chevron');
+  if (body.classList.contains('hidden')) {
+    body.classList.remove('hidden');
+    chev.classList.add('open');
+    chev.textContent = '▾';
+  } else {
+    body.classList.add('hidden');
+    chev.classList.remove('open');
+    chev.textContent = '▸';
+  }
+}
+
+// ===================== GROUP MANAGEMENT =====================
+let selectedNewColor = GROUP_COLORS[4]; // default blue
+
+function showGroupModal() {
+  if (!config) return;
+  renderGroupModalList();
+  renderColorPicker();
+  document.getElementById('group-modal').classList.add('show');
+}
+
+function renderColorPicker() {
+  const el = document.getElementById('color-picker');
+  el.innerHTML = GROUP_COLORS.map(c => `
+    <div class="color-swatch ${c===selectedNewColor?'selected':''}"
+      style="background:${c}"
+      onclick="selectColor('${c}')">
+    </div>`).join('');
+}
+
+function selectColor(c) {
+  selectedNewColor = c;
+  renderColorPicker();
+}
+
+function renderGroupModalList() {
+  const el = document.getElementById('group-list-ui');
+  const groups = getGroups();
+  if (!groups.length) {
+    el.innerHTML = `<div style="font-size:11px;color:var(--text-dim);padding:8px 0;">No groups yet. Create one below.</div>`;
+    return;
+  }
+  el.innerHTML = groups.map(g => {
+    const count = config.Turrets.filter(t => getGroup(t) === g.id).length;
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <div style="width:14px;height:14px;background:${g.color};flex-shrink:0;"></div>
+        <span style="flex:1;font-size:12px;color:var(--text-bright);">${g.name}</span>
+        <span style="font-size:10px;color:var(--text-dim);">${count} turret${count!==1?'s':''}</span>
+        <button class="group-action-btn" onclick="renameGroupInModal('${g.id}')" title="Rename">✎</button>
+        <button class="group-action-btn del" onclick="deleteGroup('${g.id}');renderGroupModalList();" title="Delete">✕</button>
+      </div>`;
+  }).join('');
+}
+
+function createGroup() {
+  const nameEl = document.getElementById('new-group-name');
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return; }
+  if (!config._groups) config._groups = [];
+  const id = 'g_' + Date.now();
+  config._groups.push({ id, name, color: selectedNewColor });
+  nameEl.value = '';
+  selectedNewColor = GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
+  markModified(`Created group "${name}"`);
+  renderGroupModalList();
+  renderColorPicker();
+  renderList();
+  if (selectedIdx >= 0) showTurretEditor(selectedIdx);
+}
+
+function deleteGroup(gid) {
+  if (!config._groups) return;
+  const grp = groupById(gid);
+  if (!confirm(`Delete this group? Turrets in the group will become ungrouped.`)) return;
+  config._groups = config._groups.filter(g => g.id !== gid);
+  config.Turrets.forEach(t => { if (getGroup(t) === gid) delete t._group; });
+  collapsedGroups.delete(gid);
+  markModified(`Deleted group "${grp ? grp.name : gid}"`);
+  renderList();
+  if (selectedIdx >= 0) showTurretEditor(selectedIdx);
+}
+
+function renameGroup(gid) {
+  const g = groupById(gid);
+  if (!g) return;
+  const name = prompt('Rename group:', g.name);
+  if (name && name.trim()) {
+    const old = g.name;
+    g.name = name.trim();
+    markModified(`Renamed group "${old}" → "${g.name}"`);
+    renderList();
+    if (selectedIdx >= 0) showTurretEditor(selectedIdx);
+  }
+}
+
+function renameGroupInModal(gid) {
+  renameGroup(gid);
+  renderGroupModalList();
+}
+
+function groupChange(i, gid) {
+  setGroup(config.Turrets[i], gid);
+  const grp = gid && groupById(gid);
+  markModified(`Turret #${i+1} assigned to group "${grp ? grp.name : 'none'}"`);
+  renderList();
+  const sel = document.querySelector(`#editor select[onchange^="groupChange"]`);
+  if (sel) sel.style.borderColor = grp ? grp.color : 'var(--border)';
+}
+
+// ===================== UTILS =====================
+function formatTime(s) {
+  if (s === 0) return '0 (no respawn)';
+  if (s < 60) return s + 's';
+  if (s < 3600) return (s/60).toFixed(0) + 'm';
+  return (s/3600).toFixed(1) + 'h';
+}
+
+// Click outside to close modal
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.classList.remove('show');
+  }
+});
+
+// ===================== OCR IMPORT =====================
+const API_KEY_STORAGE = 'atce_ocr_api_key';
+function getApiKey()     { return localStorage.getItem(API_KEY_STORAGE) || ''; }
+function saveApiKey(val) { val = val.trim(); if (val) localStorage.setItem(API_KEY_STORAGE, val); else localStorage.removeItem(API_KEY_STORAGE); }
+
+let ocrQueue = []; // [ { id, file, dataUrl, status, result, label, group, applyTo } ]
+let ocrIdCounter = 0;
+
+function triggerOcrInput() {
+  const inp = document.getElementById('ocr-api-key');
+  if (inp && !inp.value) inp.value = getApiKey();
+  document.getElementById('ocr-input').value = '';
+  document.getElementById('ocr-input').click();
+}
+
+function showOcrModal() {
+  const inp = document.getElementById('ocr-api-key');
+  if (inp && !inp.value) inp.value = getApiKey();
+  document.getElementById('ocr-modal').classList.add('show');
+  renderOcrQueue();
+}
+
+async function callOcrApi(dataUrl) {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('No API key set — enter your Gemini API key in the OCR Import panel');
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) throw new Error('Invalid image data');
+
+  const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: match[1], data: match[2] } },
+          { text: 'This is a DayZ turret placement screenshot. Extract ONLY these values and respond in exactly this format with nothing else:\nNAME: <class name>\nPX: <x position number>\nPY: <y position number>\nPZ: <z position number>\nOX: <x orientation/rotation number>\nOY: <y orientation/rotation number>\nOZ: <z orientation/rotation number>\n\nIf a value is not visible respond with 0 for that field.' }
+        ]
+      }],
+      generationConfig: { maxOutputTokens: 256, temperature: 0 }
+    })
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    const msg = err?.error?.message || JSON.stringify(err) || `HTTP ${resp.status}`;
+    throw new Error(`Gemini API error ${resp.status}: ${msg}`);
+  }
+  const json = await resp.json();
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if (!text.trim()) throw new Error('No response from Gemini');
+  return text;
+}
+
+// Parse the structured response from Claude Vision
+function parseVisionResponse(text) {
+  const get = (key) => {
+    const m = text.match(new RegExp(`${key}:\\s*([^\\n]+)`, 'i'));
+    return m ? m[1].trim() : null;
+  };
+  const name = get('NAME') || '';
+  const px = parseFloat(get('PX') || '0');
+  const py = parseFloat(get('PY') || '0');
+  const pz = parseFloat(get('PZ') || '0');
+  const ox = parseFloat(get('OX') || '0');
+  const oy = parseFloat(get('OY') || '0');
+  const oz = parseFloat(get('OZ') || '0');
+  if ([px,py,pz,ox,oy,oz].some(isNaN)) return null;
+  return { name, px, py, pz, ox, oy, oz };
+}
+
+function setOcrEngineStatus(state, msg) {
+  const dot = document.getElementById('ocr-engine-dot');
+  const msgEl = document.getElementById('ocr-engine-msg');
+  if (!dot || !msgEl) return;
+  const colors = { loading: 'var(--amber)', ready: 'var(--green)', error: 'var(--red)' };
+  dot.style.background = colors[state] || 'var(--green)';
+  msgEl.textContent = msg;
+}
+
+function handleOcrFiles(e) {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  const inp = document.getElementById('ocr-api-key');
+  if (inp && !inp.value) inp.value = getApiKey();
+  document.getElementById('ocr-modal').classList.add('show');
+  const emptyMsg = document.getElementById('ocr-empty-msg');
+  if (emptyMsg) emptyMsg.style.display = 'none';
+  files.forEach(f => queueOcrFile(f));
+}
+
+function queueOcrFile(file) {
+  const id = ++ocrIdCounter;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const item = {
+      id, file, dataUrl: e.target.result,
+      status: 'pending',
+      result: null,
+      label: '', groupId: '', applyTo: 'new', progress: 0
+    };
+    ocrQueue.push(item);
+    renderOcrQueue();
+    runOcr(id);
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runOcr(id) {
+  const item = ocrQueue.find(i => i.id === id);
+  if (!item) return;
+  item.status = 'scanning';
+  renderOcrItem(id);
+  try {
+    setOcrEngineStatus('loading', 'Reading image via Claude Vision...');
+    const text = await callOcrApi(item.dataUrl);
+    setOcrEngineStatus('ready', 'Claude Vision API ready');
+    const parsed = parseVisionResponse(text);
+    if (parsed) {
+      item.result = parsed;
+      item.status = 'done';
+      if (!item.label && parsed.name) item.label = parsed.name;
+    } else {
+      item.status = 'error';
+      item.errorMsg = 'Could not parse position/orientation from image.';
+    }
+  } catch(e) {
+    item.status = 'error';
+    item.errorMsg = e.message || 'Vision API failed';
+    setOcrEngineStatus('error', 'Error: ' + (e.message || 'unknown'));
+  }
+  renderOcrItem(id);
+  updateOcrSummary();
+}
+
+
+function renderOcrQueue() {
+  const el = document.getElementById('ocr-queue');
+  if (!el) return;
+  if (!ocrQueue.length) {
+    el.innerHTML = '<div class="ocr-empty" id="ocr-empty-msg">No screenshots added yet.</div>';
+    updateOcrSummary();
+    return;
+  }
+  // Re-render items that don't already have a DOM element
+  ocrQueue.forEach(item => {
+    if (!document.getElementById(`ocr-item-${item.id}`)) {
+      const div = document.createElement('div');
+      div.id = `ocr-item-${item.id}`;
+      el.appendChild(div);
+    }
+    renderOcrItem(item.id);
+  });
+  updateOcrSummary();
+}
+
+function renderOcrItem(id) {
+  const item = ocrQueue.find(i => i.id === id);
+  const el = document.getElementById(`ocr-item-${id}`);
+  if (!item || !el) return;
+
+  const r = item.result;
+  const groups = getGroups();
+  const groupOpts = `<option value="">— No Group —</option>` +
+    groups.map(g => `<option value="${g.id}" ${item.groupId===g.id?'selected':''}>${g.name}</option>`).join('');
+
+  const turretOpts = `<option value="new" ${item.applyTo==='new'?'selected':''}>⊕ Create new turret</option>` +
+    (config ? config.Turrets.map((t,i) =>
+      `<option value="${i}" ${item.applyTo==i?'selected':''}>#${i+1} ${getLabel(t)||t.m_sTurretClassName}</option>`
+    ).join('') : '');
+
+  let statusHtml = '';
+  if (item.status === 'scanning') {
+    statusHtml = `<div class="ocr-status scanning">⟳ Scanning...</div>`;
+  } else if (item.status === 'error') {
+    statusHtml = `<div class="ocr-status err">✕ ${item.errorMsg || 'Parse failed'}</div>`;
+  } else if (item.status === 'done' && r) {
+    statusHtml = `
+      <div class="ocr-status done">✓ Parsed successfully</div>
+      <div class="ocr-fields">
+        <div class="ocr-field ocr-field-wide">Name:<span>${r.name || '—'}</span></div>
+        <div class="ocr-field">POS X:<span>${r.px}</span></div>
+        <div class="ocr-field">POS Y:<span>${r.py}</span></div>
+        <div class="ocr-field">POS Z:<span>${r.pz}</span></div>
+        <div class="ocr-field">ROT X:<span>${r.ox}</span></div>
+        <div class="ocr-field">ROT Y:<span>${r.oy}</span></div>
+        <div class="ocr-field">ROT Z:<span>${r.oz}</span></div>
+      </div>
+      <div class="ocr-assign">
+        <input type="text" placeholder="Label (optional)" value="${item.label||''}"
+          oninput="ocrSetLabel(${id},this.value)" style="flex:2;">
+        <select onchange="ocrSetGroup(${id},this.value)">${groupOpts}</select>
+        <select onchange="ocrSetApplyTo(${id},this.value)">${turretOpts}</select>
+      </div>`;
+  } else {
+    statusHtml = `<div class="ocr-status" style="color:var(--text-dim);">⏳ Waiting...</div>`;
+  }
+
+  el.className = `ocr-item ${item.status === 'error' ? 'ocr-error' : item.status === 'done' ? 'ocr-ok' : ''}`;
+  el.innerHTML = `
+    <img class="ocr-thumb" src="${item.dataUrl}" alt="${item.file.name}">
+    <div class="ocr-details">
+      <div class="ocr-filename">${item.file.name}</div>
+      ${statusHtml}
+    </div>
+    <button class="ocr-remove" onclick="removeOcrItem(${id})">✕</button>
+    ${item.status==='scanning' ? `<div class="ocr-progress" id="ocr-prog-${id}" style="width:60%"></div>` : ''}`;
+}
+
+function ocrSetLabel(id, val) {
+  const item = ocrQueue.find(i => i.id === id);
+  if (item) item.label = val;
+}
+function ocrSetGroup(id, gid) {
+  const item = ocrQueue.find(i => i.id === id);
+  if (item) item.groupId = gid;
+}
+function ocrSetApplyTo(id, val) {
+  const item = ocrQueue.find(i => i.id === id);
+  if (item) item.applyTo = val === 'new' ? 'new' : parseInt(val);
+}
+function removeOcrItem(id) {
+  ocrQueue = ocrQueue.filter(i => i.id !== id);
+  const el = document.getElementById(`ocr-item-${id}`);
+  if (el) el.remove();
+  if (!ocrQueue.length) renderOcrQueue();
+  updateOcrSummary();
+}
+function clearOcrQueue() {
+  ocrQueue = [];
+  renderOcrQueue();
+}
+
+function updateOcrSummary() {
+  const el = document.getElementById('ocr-summary');
+  if (!el) return;
+  const done = ocrQueue.filter(i => i.status === 'done').length;
+  const scanning = ocrQueue.filter(i => i.status === 'scanning').length;
+  const err = ocrQueue.filter(i => i.status === 'error').length;
+  const total = ocrQueue.length;
+  if (!total) { el.textContent = ''; return; }
+  el.textContent = `${done} ready · ${scanning} scanning · ${err} failed · ${total} total`;
+}
+
+function importAllOcr() {
+  if (!config) { alert('Load or create a config first.'); return; }
+  const ready = ocrQueue.filter(i => i.status === 'done' && i.result);
+  if (!ready.length) { alert('No successfully scanned images to import.'); return; }
+
+  const ALL_CLASSES = Object.values(CLASS_NAMES).flat();
+
+  ready.forEach(item => {
+    const r = item.result;
+    // Match OCR name to known class names (fuzzy: normalise underscores/spaces/case)
+    const normalise = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
+    const matched = ALL_CLASSES.find(c => normalise(c) === normalise(r.name || '')) || r.name || 'M60_Turret_Bottom_1000HP';
+
+    const turretData = {
+      m_sTurretClassName: matched,
+      m_vTurretPosition: [r.px, r.py, r.pz],
+      m_vTurretRotation: [r.ox, r.oy, r.oz],
+      m_fTurretGuardRadius: 50,
+      m_sTurretAmmoClassName: 'Bullet_556x45',
+      m_nTurretShootingRPM: 650,
+      m_nTurretHitChance: 80,
+      m_bTurretExplosiveRounds: 0,
+      m_bTurretCanIdle: 1,
+      m_fTurretMaxIdleAngle: 45,
+      m_bTurretCanBeDestroyed: 1,
+      m_nTurretTimeToRespawn: 3600,
+      m_aTurretTargetsPlayers: ['ALL'],
+      m_aTurretTargetsZombies: ['ALL'],
+      m_aTurretTargetsAnimals: ['NONE'],
+      m_aTurretTargetsVehicles: ['NONE']
+    };
+    if (item.label) turretData._label = item.label;
+    if (item.groupId) turretData._group = item.groupId;
+
+    if (item.applyTo === 'new') {
+      config.Turrets.push(turretData);
+    } else {
+      const idx = parseInt(item.applyTo);
+      if (!isNaN(idx) && config.Turrets[idx]) {
+        // Overwrite position, rotation, class — preserve other settings
+        config.Turrets[idx].m_sTurretClassName = turretData.m_sTurretClassName;
+        config.Turrets[idx].m_vTurretPosition = turretData.m_vTurretPosition;
+        config.Turrets[idx].m_vTurretRotation = turretData.m_vTurretRotation;
+        if (item.label) config.Turrets[idx]._label = item.label;
+        if (item.groupId) config.Turrets[idx]._group = item.groupId;
+      }
+    }
+  });
+
+  markModified(`OCR import: ${ready.length} turret${ready.length!==1?'s':''} imported`);
+  refreshUI();
+  closeModal('ocr-modal');
+  clearOcrQueue();
+  setStatus(`OCR IMPORT: ${ready.length} turret${ready.length!==1?'s':''} added`);
+}
+
+// ===================== DOCX IMPORT =====================
+// Uses a separate queue that feeds into the same OCR pipeline/rendering
+let docxQueue = []; // same structure as ocrQueue items
+let docxIdCounter = 0;
+
+function triggerDocxInput() {
+  document.getElementById('docx-input').value = '';
+  document.getElementById('docx-input').click();
+}
+
+async function handleDocxFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  docxQueue = [];
+  docxIdCounter = 0;
+  renderDocxQueue();
+  document.getElementById('docx-modal').classList.add('show');
+  setDocxStatus('loading', `Reading "${file.name}"...`);
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+
+    // mammoth extracts raw image buffers from the docx
+    const images = [];
+    await mammoth.convertToHtml({ arrayBuffer }, {
+      convertImage: mammoth.images.imgElement(async imageEl => {
+        const buf = await imageEl.read('arraybuffer');
+        const ct = imageEl.contentType || 'image/png';
+        images.push({ buf, ct });
+        return {};
+      })
+    });
+
+    if (!images.length) {
+      setDocxStatus('warn', `No images found in "${file.name}".`);
+      return;
+    }
+
+    setDocxStatus('loading', `Found ${images.length} image${images.length!==1?'s':''} — queuing OCR...`);
+    document.getElementById('docx-empty-msg') && (document.getElementById('docx-empty-msg').style.display = 'none');
+
+    // Convert each image buffer to a dataURL and push into docxQueue
+    images.forEach((img, idx) => {
+      const id = ++docxIdCounter;
+      const blob = new Blob([img.buf], { type: img.ct });
+      const fakeFile = new File([blob], `${file.name} — image ${idx+1}`, { type: img.ct });
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const item = {
+          id, file: fakeFile, dataUrl: ev.target.result,
+          status: 'pending', result: null,
+          label: '', groupId: '', applyTo: 'new', progress: 0
+        };
+        docxQueue.push(item);
+        renderDocxQueue();
+        runDocxOcr(id);
+      };
+      reader.readAsDataURL(blob);
+    });
+
+    setDocxStatus('ready', `Extracted ${images.length} image${images.length!==1?'s':''} from "${file.name}" — scanning...`);
+
+  } catch(err) {
+    setDocxStatus('error', `Failed to read document: ${err.message}`);
+  }
+}
+
+function setDocxStatus(state, msg) {
+  const dot = document.getElementById('docx-status-dot');
+  const msgEl = document.getElementById('docx-status-msg');
+  if (!dot || !msgEl) return;
+  const colors = { loading: 'var(--amber)', ready: 'var(--green)', warn: 'var(--amber)', error: 'var(--red)' };
+  dot.style.background = colors[state] || 'var(--text-dim)';
+  msgEl.textContent = msg;
+}
+
+async function runDocxOcr(id) {
+  const item = docxQueue.find(i => i.id === id);
+  if (!item) return;
+  item.status = 'scanning';
+  renderDocxItem(id);
+  try {
+    const text = await callOcrApi(item.dataUrl);
+    const parsed = parseVisionResponse(text);
+    if (parsed) {
+      item.result = parsed;
+      item.status = 'done';
+      if (!item.label && parsed.name) item.label = parsed.name;
+    } else {
+      item.status = 'error';
+      item.errorMsg = 'Could not parse position/orientation data.';
+    }
+  } catch(e) {
+    item.status = 'error';
+    item.errorMsg = e.message || 'Vision API failed';
+  }
+  renderDocxItem(id);
+  updateDocxSummary();
+}
+
+function renderDocxQueue() {
+  const el = document.getElementById('docx-queue');
+  if (!el) return;
+  if (!docxQueue.length) {
+    el.innerHTML = '<div class="ocr-empty" id="docx-empty-msg">No images extracted yet.</div>';
+    updateDocxSummary();
+    return;
+  }
+  docxQueue.forEach(item => {
+    if (!document.getElementById(`docx-item-${item.id}`)) {
+      const div = document.createElement('div');
+      div.id = `docx-item-${item.id}`;
+      el.appendChild(div);
+    }
+    renderDocxItem(item.id);
+  });
+  updateDocxSummary();
+}
+
+function renderDocxItem(id) {
+  // Reuse the same rendering logic as OCR items, just with docx- prefixed IDs
+  const item = docxQueue.find(i => i.id === id);
+  const el = document.getElementById(`docx-item-${id}`);
+  if (!item || !el) return;
+
+  const r = item.result;
+  const groups = getGroups();
+  const groupOpts = `<option value="">— No Group —</option>` +
+    groups.map(g => `<option value="${g.id}" ${item.groupId===g.id?'selected':''}>${g.name}</option>`).join('');
+  const turretOpts = `<option value="new" ${item.applyTo==='new'?'selected':''}>⊕ Create new turret</option>` +
+    (config ? config.Turrets.map((t,i) =>
+      `<option value="${i}" ${item.applyTo==i?'selected':''}>#${i+1} ${getLabel(t)||t.m_sTurretClassName}</option>`
+    ).join('') : '');
+
+  let statusHtml = '';
+  if (item.status === 'scanning') {
+    statusHtml = `<div class="ocr-status scanning">⟳ Scanning...</div>`;
+  } else if (item.status === 'error') {
+    statusHtml = `<div class="ocr-status err">✕ ${item.errorMsg || 'Parse failed'}</div>`;
+  } else if (item.status === 'done' && r) {
+    statusHtml = `
+      <div class="ocr-status done">✓ Parsed successfully</div>
+      <div class="ocr-fields">
+        <div class="ocr-field ocr-field-wide">Name:<span>${r.name || '—'}</span></div>
+        <div class="ocr-field">POS X:<span>${r.px}</span></div>
+        <div class="ocr-field">POS Y:<span>${r.py}</span></div>
+        <div class="ocr-field">POS Z:<span>${r.pz}</span></div>
+        <div class="ocr-field">ROT X:<span>${r.ox}</span></div>
+        <div class="ocr-field">ROT Y:<span>${r.oy}</span></div>
+        <div class="ocr-field">ROT Z:<span>${r.oz}</span></div>
+      </div>
+      <div class="ocr-assign">
+        <input type="text" placeholder="Label (optional)" value="${item.label||''}"
+          oninput="docxSetLabel(${id},this.value)" style="flex:2;">
+        <select onchange="docxSetGroup(${id},this.value)">${groupOpts}</select>
+        <select onchange="docxSetApplyTo(${id},this.value)">${turretOpts}</select>
+      </div>`;
+  } else {
+    statusHtml = `<div class="ocr-status" style="color:var(--text-dim);">⏳ Waiting...</div>`;
+  }
+
+  el.className = `ocr-item ${item.status==='error'?'ocr-error':item.status==='done'?'ocr-ok':''}`;
+  el.innerHTML = `
+    <img class="ocr-thumb" src="${item.dataUrl}" alt="${item.file.name}">
+    <div class="ocr-details">
+      <div class="ocr-filename">${item.file.name}</div>
+      ${statusHtml}
+    </div>
+    <button class="ocr-remove" onclick="removeDocxItem(${id})">✕</button>
+    ${item.status==='scanning'?`<div class="ocr-progress" style="width:60%"></div>`:''}`;
+}
+
+function docxSetLabel(id, val)   { const i = docxQueue.find(i=>i.id===id); if(i) i.label=val; }
+function docxSetGroup(id, gid)   { const i = docxQueue.find(i=>i.id===id); if(i) i.groupId=gid; }
+function docxSetApplyTo(id, val) { const i = docxQueue.find(i=>i.id===id); if(i) i.applyTo=val==='new'?'new':parseInt(val); }
+
+function removeDocxItem(id) {
+  docxQueue = docxQueue.filter(i => i.id !== id);
+  const el = document.getElementById(`docx-item-${id}`);
+  if (el) el.remove();
+  if (!docxQueue.length) renderDocxQueue();
+  updateDocxSummary();
+}
+
+function clearDocxQueue() {
+  docxQueue = [];
+  renderDocxQueue();
+  setDocxStatus('loading', 'No document loaded.');
+}
+
+function updateDocxSummary() {
+  const el = document.getElementById('docx-summary');
+  if (!el) return;
+  const done = docxQueue.filter(i=>i.status==='done').length;
+  const scanning = docxQueue.filter(i=>i.status==='scanning').length;
+  const err = docxQueue.filter(i=>i.status==='error').length;
+  const total = docxQueue.length;
+  el.textContent = total ? `${done} ready · ${scanning} scanning · ${err} failed · ${total} total` : '';
+}
+
+function importAllDocx() {
+  if (!config) { alert('Load or create a config first.'); return; }
+  const ready = docxQueue.filter(i => i.status === 'done' && i.result);
+  if (!ready.length) { alert('No successfully scanned images to import.'); return; }
+  const ALL_CLASSES = Object.values(CLASS_NAMES).flat();
+  const normalise = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
+
+  ready.forEach(item => {
+    const r = item.result;
+    const matched = ALL_CLASSES.find(c => normalise(c) === normalise(r.name||'')) || r.name || 'M60_Turret_Bottom_1000HP';
+    const turretData = {
+      m_sTurretClassName: matched,
+      m_vTurretPosition: [r.px, r.py, r.pz],
+      m_vTurretRotation: [r.ox, r.oy, r.oz],
+      m_fTurretGuardRadius: 50, m_sTurretAmmoClassName: 'Bullet_556x45',
+      m_nTurretShootingRPM: 650, m_nTurretHitChance: 80,
+      m_bTurretExplosiveRounds: 0, m_bTurretCanIdle: 1,
+      m_fTurretMaxIdleAngle: 45, m_bTurretCanBeDestroyed: 1,
+      m_nTurretTimeToRespawn: 3600,
+      m_aTurretTargetsPlayers: ['ALL'], m_aTurretTargetsZombies: ['ALL'],
+      m_aTurretTargetsAnimals: ['NONE'], m_aTurretTargetsVehicles: ['NONE']
+    };
+    if (item.label)   turretData._label = item.label;
+    if (item.groupId) turretData._group = item.groupId;
+
+    if (item.applyTo === 'new') {
+      config.Turrets.push(turretData);
+    } else {
+      const idx = parseInt(item.applyTo);
+      if (!isNaN(idx) && config.Turrets[idx]) {
+        config.Turrets[idx].m_sTurretClassName  = turretData.m_sTurretClassName;
+        config.Turrets[idx].m_vTurretPosition   = turretData.m_vTurretPosition;
+        config.Turrets[idx].m_vTurretRotation   = turretData.m_vTurretRotation;
+        if (item.label)   config.Turrets[idx]._label = item.label;
+        if (item.groupId) config.Turrets[idx]._group = item.groupId;
+      }
+    }
+  });
+
+  markModified(`DOCX import: ${ready.length} turret${ready.length!==1?'s':''} imported`);
+  refreshUI();
+  closeModal('docx-modal');
+  clearDocxQueue();
+  setStatus(`DOCX IMPORT: ${ready.length} turret${ready.length!==1?'s':''} added`);
+}
+
+
+// ===================== MAP IMPORT =====================
+let mapParsed = [];
+
+function triggerMapInput() {
+  document.getElementById('map-input').value = '';
+  document.getElementById('map-input').click();
+}
+
+function handleMapFiles(e) {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  mapParsed = [];
+  let pending = files.length;
+  let allLines = [];
+  files.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const lines = ev.target.result.split(/\r?\n/).filter(l => l.trim());
+      allLines = allLines.concat(lines.map(l => ({ line: l, file: f.name })));
+      if (--pending === 0) {
+        parseMapLines(allLines);
+        document.getElementById('map-modal').classList.add('show');
+        populateMapDefaults();
+        renderMapPreview();
+      }
+    };
+    reader.readAsText(f);
+  });
+}
+
+function parseMapLines(lineObjs) {
+  mapParsed = [];
+  lineObjs.forEach(({ line, file }) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) return;
+    const parts = trimmed.split('|');
+    if (parts.length < 3) {
+      mapParsed.push({ valid: false, errorMsg: `Bad format: "${trimmed}"`, line: trimmed, file, skip: false });
+      return;
+    }
+    const className = parts[0].trim();
+    const posParts  = parts[1].trim().split(/\s+/);
+    const rotParts  = parts[2].trim().split(/\s+/);
+    if (posParts.length < 3 || rotParts.length < 3) {
+      mapParsed.push({ valid: false, errorMsg: `Not enough coordinates: "${trimmed}"`, line: trimmed, file, skip: false });
+      return;
+    }
+    const [px, py, pz] = posParts.map(Number);
+    const [ox, oy, oz] = rotParts.map(Number);
+    if ([px,py,pz,ox,oy,oz].some(isNaN)) {
+      mapParsed.push({ valid: false, errorMsg: `Non-numeric coordinates: "${trimmed}"`, line: trimmed, file, skip: false });
+      return;
+    }
+    mapParsed.push({ valid: true, className, px, py, pz, ox, oy, oz, file, skip: false });
+  });
+}
+
+function populateMapDefaults() {
+  const ammoSel = document.getElementById('map-ammo');
+  if (ammoSel && !ammoSel.options.length) {
+    AMMO_TYPES.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a; opt.textContent = a;
+      if (a === 'Bullet_556x45') opt.selected = true;
+      ammoSel.appendChild(opt);
+    });
+  }
+  const grpSel = document.getElementById('map-group');
+  if (grpSel) {
+    grpSel.innerHTML = '<option value="">— No Group —</option>';
+    getGroups().forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.id; opt.textContent = g.name;
+      grpSel.appendChild(opt);
+    });
+  }
+}
+
+function renderMapPreview() {
+  const wrap    = document.getElementById('map-preview-table');
+  const summary = document.getElementById('map-summary');
+  if (!wrap) return;
+  if (!mapParsed.length) {
+    wrap.innerHTML = '<div class="ocr-empty">No .map file loaded yet.</div>';
+    if (summary) summary.textContent = '';
+    return;
+  }
+  const valid   = mapParsed.filter(r => r.valid).length;
+  const invalid = mapParsed.filter(r => !r.valid).length;
+  if (summary) summary.textContent = `${valid} valid · ${invalid} invalid · ${mapParsed.length} total`;
+  const ALL_CLASSES = Object.values(CLASS_NAMES).flat();
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+    <thead><tr style="background:#0c110c;border-bottom:1px solid var(--border);">
+      <th style="padding:6px 8px;text-align:left;color:var(--text-dim);font-weight:normal;">#</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-dim);font-weight:normal;">CLASS</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-dim);font-weight:normal;">POSITION</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-dim);font-weight:normal;">ROTATION</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-dim);font-weight:normal;">STATUS</th>
+      <th style="padding:6px 8px;text-align:center;color:var(--text-dim);font-weight:normal;">SKIP</th>
+    </tr></thead><tbody>`;
+
+  mapParsed.forEach((row, i) => {
+    const dim = row.skip ? 'opacity:0.35;' : '';
+    if (!row.valid) {
+      html += `<tr style="border-bottom:1px solid var(--border);${dim}background:rgba(244,67,54,0.04);">
+        <td style="padding:5px 8px;color:var(--text-dim);">${i+1}</td>
+        <td colspan="3" style="padding:5px 8px;color:var(--red);font-size:10px;">${row.errorMsg}</td>
+        <td style="padding:5px 8px;"><span class="tag red">ERROR</span></td>
+        <td style="padding:5px 8px;text-align:center;">—</td></tr>`;
+      return;
+    }
+    const known = ALL_CLASSES.includes(row.className);
+    html += `<tr style="border-bottom:1px solid var(--border);${dim}">
+      <td style="padding:5px 8px;color:var(--text-dim);">${i+1}</td>
+      <td style="padding:5px 8px;color:${known?'var(--green-bright)':'var(--amber)'};white-space:nowrap;">${row.className}</td>
+      <td style="padding:5px 8px;color:var(--text-dim);white-space:nowrap;">${row.px.toFixed(3)}, ${row.py.toFixed(3)}, ${row.pz.toFixed(3)}</td>
+      <td style="padding:5px 8px;color:var(--text-dim);white-space:nowrap;">${row.ox.toFixed(3)}, ${row.oy.toFixed(3)}, ${row.oz.toFixed(3)}</td>
+      <td style="padding:5px 8px;"><span class="tag ${known?'green':'amber'}">${known?'KNOWN':'CUSTOM'}</span></td>
+      <td style="padding:5px 8px;text-align:center;">
+        <input type="checkbox" ${row.skip?'checked':''} onchange="mapToggleSkip(${i},this.checked)"
+          style="width:auto;padding:0;border:none;cursor:pointer;accent-color:var(--green);">
+      </td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function mapToggleSkip(i, checked) {
+  if (mapParsed[i]) { mapParsed[i].skip = checked; renderMapPreview(); }
+}
+
+function clearMapData() {
+  mapParsed = [];
+  renderMapPreview();
+  const s = document.getElementById('map-summary');
+  if (s) s.textContent = '';
+}
+
+function importMapTurrets() {
+  if (!config) { alert('Load or create a config first.'); return; }
+  const toImport = mapParsed.filter(r => r.valid && !r.skip);
+  if (!toImport.length) { alert('No valid turrets to import.'); return; }
+
+  const ammo      = document.getElementById('map-ammo')?.value       || 'Bullet_556x45';
+  const radius    = parseFloat(document.getElementById('map-radius')?.value)   || 50;
+  const rpm       = parseInt(document.getElementById('map-rpm')?.value)        || 650;
+  const hitChance = parseInt(document.getElementById('map-hitchance')?.value)  || 80;
+  const respawn   = parseInt(document.getElementById('map-respawn')?.value)    || 3600;
+  const groupId   = document.getElementById('map-group')?.value               || '';
+  const destr     = document.getElementById('map-destructible')?.checked ? 1  : 0;
+
+  toImport.forEach(row => {
+    const t = {
+      m_sTurretClassName:      row.className,
+      m_vTurretPosition:       [row.px, row.py, row.pz],
+      m_vTurretRotation:       [row.ox, row.oy, row.oz],
+      m_fTurretGuardRadius:    radius,
+      m_sTurretAmmoClassName:  ammo,
+      m_nTurretShootingRPM:    rpm,
+      m_nTurretHitChance:      hitChance,
+      m_bTurretExplosiveRounds: 0,
+      m_bTurretCanIdle:        1,
+      m_fTurretMaxIdleAngle:   45,
+      m_bTurretCanBeDestroyed: destr,
+      m_nTurretTimeToRespawn:  respawn,
+      m_aTurretTargetsPlayers:  ['ALL'],
+      m_aTurretTargetsZombies:  ['ALL'],
+      m_aTurretTargetsAnimals:  ['NONE'],
+      m_aTurretTargetsVehicles: ['NONE']
+    };
+    if (groupId) t._group = groupId;
+    config.Turrets.push(t);
+  });
+
+  markModified(`MAP import: ${toImport.length} turret${toImport.length!==1?'s':''} imported`);
+  refreshUI();
+  closeModal('map-modal');
+  clearMapData();
+  setStatus(`MAP IMPORT: ${toImport.length} turret${toImport.length!==1?'s':''} added`);
+}
+
+// Drag-and-drop onto all modal drop zones
+document.addEventListener('DOMContentLoaded', () => {
+  // OCR drop zone
+  const ocrDz = document.getElementById('ocr-drop-zone');
+  if (ocrDz) {
+    ['dragenter','dragover'].forEach(e => ocrDz.addEventListener(e, ev => { ev.preventDefault(); ocrDz.classList.add('drag-over'); }));
+    ['dragleave','drop'].forEach(e => ocrDz.addEventListener(e, ev => { ev.preventDefault(); ocrDz.classList.remove('drag-over'); }));
+    ocrDz.addEventListener('drop', ev => {
+      const files = Array.from(ev.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      if (files.length) { document.getElementById('ocr-modal').classList.add('show'); files.forEach(f => queueOcrFile(f)); }
+    });
+  }
+  // DOCX drop zone
+  const docxDz = document.getElementById('docx-drop-zone');
+  if (docxDz) {
+    ['dragenter','dragover'].forEach(e => docxDz.addEventListener(e, ev => { ev.preventDefault(); docxDz.classList.add('drag-over'); }));
+    ['dragleave','drop'].forEach(e => docxDz.addEventListener(e, ev => { ev.preventDefault(); docxDz.classList.remove('drag-over'); }));
+    docxDz.addEventListener('drop', ev => {
+      ev.preventDefault(); docxDz.classList.remove('drag-over');
+      const f = ev.dataTransfer.files[0];
+      if (f) handleDocxFile({ target: { files: [f] } });
+    });
+  }
+  // MAP drop zone
+  const mapDz = document.getElementById('map-drop-zone');
+  if (mapDz) {
+    ['dragenter','dragover'].forEach(e => mapDz.addEventListener(e, ev => { ev.preventDefault(); mapDz.classList.add('drag-over'); }));
+    ['dragleave','drop'].forEach(e => mapDz.addEventListener(e, ev => { ev.preventDefault(); mapDz.classList.remove('drag-over'); }));
+    mapDz.addEventListener('drop', ev => {
+      ev.preventDefault(); mapDz.classList.remove('drag-over');
+      const files = Array.from(ev.dataTransfer.files);
+      if (files.length) handleMapFiles({ target: { files } });
+    });
+  }
+});
+
+// ===================== DZ FORGE SERVER I/O =====================
+let serverFile = null;
+async function dzApi(route, body) {
+  const r = await fetch(route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+async function loadFromServer() {
+  try {
+    setStatus('LOADING FROM SERVER…');
+    const meta = await dzApi('/api/turrets', {});
+    serverFile = meta.file;
+    if (!meta.exists) {
+      config = { Turrets: [] }; selectedIdx = -1; history = []; historyIdx = -1;
+      refreshUI(); modified = false; document.getElementById('status-modified').style.display = 'none';
+      setStatus('NO CONFIG ON SERVER YET — a new one is ready; press SERVER SAVE to create it.');
+      return;
+    }
+    const jr = await dzApi('/api/read', { path: serverFile });
+    config = JSON.parse(jr.content);
+    if (!config.Turrets) config.Turrets = [];
+    selectedIdx = -1; history = []; historyIdx = -1;
+    refreshUI(); pushSnapshot('Loaded from server');
+    modified = false; document.getElementById('status-modified').style.display = 'none';
+    setStatus('LOADED FROM SERVER — ' + serverFile.split(/[\\/]/).pop() + ' (' + config.Turrets.length + ' turrets)');
+  } catch (e) { setStatus('SERVER LOAD FAILED: ' + e.message); }
+}
+async function saveToServer() {
+  if (!config) { alert('Nothing to save — load or create a config first.'); return; }
+  try {
+    if (!serverFile) { const meta = await dzApi('/api/turrets', {}); serverFile = meta.file; }
+    setStatus('SAVING TO SERVER…');
+    const jr = await dzApi('/api/save', { path: serverFile, content: JSON.stringify(config, null, 2) });
+    modified = false; document.getElementById('status-modified').style.display = 'none';
+    const bk = (jr.backup || '').split(/[\\/]/).pop();
+    setStatus('SAVED TO SERVER ✓' + (bk ? ' — backup ' + bk : ''));
+  } catch (e) { setStatus('SERVER SAVE FAILED: ' + e.message); alert('Save to server failed: ' + e.message); }
+}
+
+// ===================== TURRET VERIFY =====================
+function verifyTurrets() {
+  if (!config || !config.Turrets) { alert('Load a config first.'); return; }
+  const issues = [], posKey = {};
+  config.Turrets.forEach((t, i) => {
+    const tag = `#${i + 1} ${t.m_sTurretClassName || '(no class)'}`;
+    const pos = t.m_vTurretPosition || [];
+    if (!t.m_sTurretClassName) issues.push({ sev: 'err', i, msg: tag + ' — no turret class name' });
+    if (!t.m_sTurretAmmoClassName) issues.push({ sev: 'err', i, msg: tag + ' — no ammo class set' });
+    if (pos.length < 3 || (Math.abs(pos[0]) < 0.5 && Math.abs(pos[2]) < 0.5)) issues.push({ sev: 'warn', i, msg: tag + ' — at map origin (0,0), looks unplaced' });
+    if (!(t.m_fTurretGuardRadius > 0)) issues.push({ sev: 'warn', i, msg: tag + ' — guard radius is 0, it will never engage' });
+    if (!(t.m_nTurretShootingRPM > 0)) issues.push({ sev: 'warn', i, msg: tag + ' — fire rate (RPM) is 0, it will never shoot' });
+    const hit = t.m_nTurretHitChance;
+    if (hit == null || hit <= 0) issues.push({ sev: 'warn', i, msg: tag + ' — hit chance is 0, every shot misses' });
+    else if (hit > 100) issues.push({ sev: 'warn', i, msg: tag + ' — hit chance above 100%' });
+    const tgts = [].concat(t.m_aTurretTargetsPlayers || [], t.m_aTurretTargetsZombies || [], t.m_aTurretTargetsAnimals || [], t.m_aTurretTargetsVehicles || []).filter(x => x && x !== 'NONE');
+    if (!tgts.length) issues.push({ sev: 'warn', i, msg: tag + ' — targets nothing (all target lists are NONE/empty)' });
+    if (pos.length >= 3) { const k = pos[0].toFixed(1) + ',' + pos[2].toFixed(1); (posKey[k] = posKey[k] || []).push(i); }
+  });
+  Object.entries(posKey).forEach(([k, arr]) => { if (arr.length > 1) issues.push({ sev: 'warn', i: arr[0], msg: arr.length + ' turrets share the same spot (' + k + ') — #' + arr.map(x => x + 1).join(', #') }); });
+  renderTurretVerify(issues);
+}
+function renderTurretVerify(issues) {
+  const body = document.getElementById('verify-body');
+  const errs = issues.filter(x => x.sev === 'err').length, warns = issues.length - errs;
+  if (!issues.length) {
+    body.innerHTML = '<div style="color:var(--green-bright);padding:8px;">✓ No problems found across ' + config.Turrets.length + ' turrets.</div>';
+  } else {
+    body.innerHTML = '<div style="margin-bottom:10px;color:var(--text-dim);"><b style="color:var(--red)">' + errs + '</b> error' + (errs !== 1 ? 's' : '') + ', <b style="color:var(--amber)">' + warns + '</b> warning' + (warns !== 1 ? 's' : '') + ' — click a line to jump to that turret.</div>' +
+      issues.map(x => '<div class="verify-row" data-i="' + x.i + '" style="cursor:pointer;padding:5px 8px;border-bottom:1px solid var(--border);color:' + (x.sev === 'err' ? 'var(--red)' : 'var(--amber)') + ';">' + (x.sev === 'err' ? '⛔ ' : '⚠ ') + x.msg + '</div>').join('');
+    body.querySelectorAll('.verify-row').forEach(r => r.onclick = () => { selectTurret(+r.dataset.i); closeModal('verify-modal'); });
+  }
+  document.getElementById('verify-modal').classList.add('show');
+}
+
+// INIT
+init();
+</script>
+</body>
+</html>

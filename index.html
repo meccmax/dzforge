@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DZ Forge — DeerIsle server map</title>
+  <link rel="stylesheet" href="vendor/leaflet.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0c0f13; }
+    #map { position: absolute; inset: 0; background: #0c0f13; }
+
+    .panel {
+      position: absolute; z-index: 1000;
+      background: rgba(16,20,26,0.9); color: #e6e9ef;
+      font: 13px/1.45 "Segoe UI", Roboto, sans-serif;
+      border: 1px solid #2a323d; border-radius: 8px;
+      padding: 10px 12px; backdrop-filter: blur(4px);
+    }
+    #title { top: 12px; left: 12px; max-width: 300px; }
+    #title h1 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+    #title p  { margin: 0; color: #9aa4b2; font-size: 12px; }
+    #title .tag { color: #f1af41; }
+    #title .warn { color: #f7b955; margin-top: 6px; display: block; font-size: 11px; }
+    #editbar { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+    #editbar label { cursor: pointer; user-select: none; }
+    #editbar .mode { color: #ff6b6b; font-weight: 600; display: none; }
+    body.editing #editbar .mode { display: inline; }
+    .placebtn { display: none; background: #1f6feb; color: #fff; border: 0; border-radius: 4px; padding: 3px 8px; font: 12px "Segoe UI"; cursor: pointer; }
+    body.editing .placebtn { display: inline-block; }
+    .placebtn:hover { background: #388bfd; }
+    .placesel { display: none; background: #0c0f13; color: #e6e9ef; border: 1px solid #2a323d; border-radius: 4px; padding: 2px 4px; font: 12px "Segoe UI"; }
+    body.editing .placesel { display: inline-block; }
+    body.editing #map { box-shadow: inset 0 0 0 2px rgba(255,107,107,0.5); }
+
+    #coords { bottom: 12px; left: 12px; font-variant-numeric: tabular-nums; min-width: 150px; }
+    #coords b { color: #7fd1ff; font-weight: 600; }
+    #coords .hint { color: #7d8794; font-size: 11px; }
+
+    #legend { bottom: 12px; right: 12px; max-height: 38vh; overflow-y: auto; }
+    #legend .row { display: flex; align-items: center; gap: 7px; margin: 2px 0; }
+    #legend .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+    #legend .ct { color: #9aa4b2; margin-left: auto; padding-left: 10px; font-variant-numeric: tabular-nums; }
+
+    #toast {
+      position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+      z-index: 1200; background: rgba(16,20,26,0.96); color: #e6e9ef;
+      border: 1px solid #2a323d; border-radius: 8px; padding: 9px 14px;
+      font: 13px "Segoe UI"; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 70vw;
+    }
+    #toast.show { opacity: 1; }
+    #toast.ok { border-color: #6ee7a8; } #toast.err { border-color: #ff6b6b; }
+
+    .leaflet-container { background: #0c0f13; }
+    .leaflet-control-layers { background: rgba(16,20,26,0.92); color: #e6e9ef; border: 1px solid #2a323d; max-height: 56vh; overflow-y: auto; }
+    .leaflet-control-layers-separator { border-top: 1px solid #2a323d; }
+    .leaflet-control-layers label { margin: 2px 0; }
+    .zone-label {
+      background: rgba(241,175,65,0.15); border: 1px solid #f1af41; color: #f1af41;
+      border-radius: 4px; padding: 0 5px; font: 11px "Segoe UI"; white-space: nowrap;
+    }
+    .dz-dot { background: transparent; border: 0; }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #11151b; color: #e6e9ef; }
+    .leaflet-popup-content b { color: #7fd1ff; }
+    .leaflet-popup-content .src { margin-top: 6px; border-top: 1px solid #2a323d; padding-top: 5px; }
+    .leaflet-popup-content .src a { color: #7fd1ff; text-decoration: none; }
+    .leaflet-popup-content .src a:hover { text-decoration: underline; color: #f1af41; }
+    .leaflet-popup-content .eform { margin-top: 7px; display: grid; gap: 4px; }
+    .leaflet-popup-content .eform .erow { display: flex; align-items: center; gap: 6px; }
+    .leaflet-popup-content .eform label { color: #9aa4b2; flex: 0 0 70px; cursor: help; }
+    .leaflet-popup-content .eform input { flex: 1; min-width: 90px; background: #0c0f13; color: #e6e9ef; border: 1px solid #2a323d; border-radius: 4px; padding: 2px 5px; }
+    .leaflet-popup-content .eform button { margin-top: 3px; background: #1f6feb; color: #fff; border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+    .leaflet-popup-content .eform button:hover { background: #388bfd; }
+    .leaflet-popup-content .eform .ebtns { display: flex; gap: 6px; margin-top: 3px; }
+    .leaflet-popup-content .eform .del { background: #b3271e; }
+    .leaflet-popup-content .eform .del:hover { background: #e5484d; }
+    .leaflet-popup-content .hist { margin: 6px 0; max-height: 160px; overflow-y: auto; display: grid; gap: 3px; }
+    .leaflet-popup-content .hrow { display: flex; align-items: center; gap: 8px; }
+    .leaflet-popup-content .hrow span { flex: 1; color: #c7ced8; }
+    .leaflet-popup-content .hrow button, .leaflet-popup-content .hback { background: #1f6feb; color: #fff; border: 0; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+    .leaflet-popup-content .hempty { color: #9aa4b2; margin: 6px 0; }
+    .minibtn { background: #23303c; color: #cdd6e0; border: 1px solid #2a323d; border-radius: 4px; padding: 2px 8px; font: 12px "Segoe UI"; cursor: pointer; margin-top: 6px; }
+    .minibtn:hover { background: #2c3a4a; }
+    #backups { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 540px; max-width: 88vw; max-height: 72vh; overflow: auto; z-index: 1300; }
+    #backups .bhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    #backups .blist { display: grid; gap: 4px; }
+    #backups .hrow { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #1c232c; padding-bottom: 4px; }
+    #backups .hrow span { flex: 1; color: #c7ced8; font-size: 12px; }
+    #backups .hrow small { color: #7d8794; }
+    #backups button { background: #1f6feb; color: #fff; border: 0; border-radius: 4px; padding: 3px 9px; cursor: pointer; }
+    #backups .hback { background: #23303c; }
+    code { color: #f1af41; }
+    #scanfilter { top: 12px; left: 336px; max-width: 250px; max-height: 60vh; overflow-y: auto; }
+    #scanfilter .sf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .sf-row { display: flex; gap: 6px; align-items: center; font-size: 11px; margin: 2px 0; cursor: pointer; }
+    .sf-nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sf-ct { color: #7d8794; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="title" class="panel">
+    <h1>DeerIsle <span class="tag">— DZ Forge</span></h1>
+    <p>Your live server map. Toggle layers (top-right). Hover for details; click for config link.</p>
+    <div id="editbar">
+      <label title="Turn on to drag markers and edit details — every change saves to the file with a backup. Leave it off to look around safely without changing anything."><input type="checkbox" id="editToggle"> ✏️ Edit mode</label>
+      <span class="mode">● drag markers to move · saves to file (backup made)</span>
+    </div>
+    <span id="warn" class="warn"></span>
+    <div><button id="backupsBtn" class="minibtn" title="Browse every backup DZ Forge has made (edits and deletes) and roll any file back — even things you deleted.">🗄 Backups / restore</button></div>
+    <div><button id="scanBtn" class="minibtn" title="Scan every server/mod file for coordinate data (positions, .map placements, XML x/z) and plot whatever is found as an extra layer. Best-effort — already-shown layers and the huge economy files are skipped.">🔍 Scan files for coordinates</button></div>
+  </div>
+  <div id="coords" class="panel" title="Shows the in-game world position (X = east/west, Z = north/south) under your mouse — handy for placing things at exact spots.">
+    World&nbsp; X <b id="cx">—</b>&nbsp;&nbsp; Z <b id="cz">—</b>
+    <div class="hint">move the mouse over the map</div>
+  </div>
+  <div id="legend" class="panel"></div>
+  <div id="toast"></div>
+  <div id="scanfilter" class="panel" style="display:none;">
+    <div class="sf-head"><b>📍 Scanned files</b><button id="scanfilter-close" class="minibtn" style="margin-top:0;">✕</button></div>
+    <div style="margin-bottom:6px;"><button id="scan-all" class="minibtn" style="margin-top:0;">all</button> <button id="scan-none" class="minibtn" style="margin-top:0;">none</button></div>
+    <div id="scanfilter-list"></div>
+  </div>
+  <div id="backups" class="panel" style="display:none;">
+    <div class="bhead"><b>🗄 All backups (newest first)</b><button class="hback" onclick="DZ.closeBackups()" title="Close this window.">✕ close</button></div>
+    <div id="backupsList" class="blist"></div>
+  </div>
+
+  <script src="vendor/leaflet.js"></script>
+  <script>
+    const TILE = 256;
+    // map size comes from config (/api/data) — set in initMap() once data loads.
+    // Assumes a square map image where worldSize ≈ 256·2ⁿ px (1 px = 1 m), e.g. DeerIsle 16384.
+    let SIZE = 16384, MAXZ = 6, map, worldToLatLng, latLngToWorld, bounds;
+    function initMap(worldSize) {
+      SIZE = worldSize;
+      MAXZ = Math.max(0, Math.round(Math.log2(SIZE / TILE)));
+      map = L.map('map', { crs: L.CRS.Simple, minZoom: 0, maxZoom: MAXZ, attributionControl: false });
+      worldToLatLng = (X, Z) => map.unproject([X, SIZE - Z], MAXZ);
+      latLngToWorld = (ll) => { const p = map.project(ll, MAXZ); return { X: p.x, Z: SIZE - p.y }; };
+      bounds = L.latLngBounds(map.unproject([0, SIZE], MAXZ), map.unproject([SIZE, 0], MAXZ));
+      L.tileLayer('tiles/{z}/{x}/{y}.jpg', { tileSize: TILE, minZoom: 0, maxZoom: MAXZ, bounds, noWrap: true }).addTo(map);
+      map.fitBounds(bounds);
+      map.setMaxBounds(bounds.pad(0.1));
+      const cx = document.getElementById('cx'), cz = document.getElementById('cz');
+      map.on('mousemove', (e) => { const w = latLngToWorld(e.latlng); cx.textContent = Math.round(w.X); cz.textContent = Math.round(w.Z); });
+    }
+
+    function worldCircle(X, Z, r, opts, seg = 72) {
+      const pts = [];
+      for (let i = 0; i <= seg; i++) { const a = i / seg * Math.PI * 2; pts.push(worldToLatLng(X + r * Math.cos(a), Z + r * Math.sin(a))); }
+      return L.polygon(pts, opts);
+    }
+    const ll = (x, z) => worldToLatLng(x, z);
+    const baseName = p => (p || '').split(/[\\\/]/).pop();
+    // HTML-escape config-derived values before they go into Leaflet tooltips/popups (XSS guard — SECURITY.md F-1)
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const round2 = n => Math.round(n * 100) / 100;
+    // nested get/set by dotted path (numeric segments index arrays): 'Data.Pos.0', 'DropLocation.Radius'
+    const getPath = (o, path) => path.split('.').reduce((a, k) => a == null ? a : a[/^\d+$/.test(k) ? +k : k], o);
+    function setPath(o, path, val) {
+      const parts = path.split('.');
+      for (let i = 0; i < parts.length - 1; i++) { const k = parts[i]; o = o[/^\d+$/.test(k) ? +k : k]; if (o == null) return; }
+      const last = parts[parts.length - 1]; o[/^\d+$/.test(last) ? +last : last] = val;
+    }
+    // surgical text patch: replace ONLY the given values in raw JSON, preserving all other
+    // formatting (trailing-zero floats, tabs, spacing). Returns null if it can't safely locate them.
+    function surgicalPatch(text, edits) {
+      const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      let out = text;
+      for (const { path, value } of edits) {
+        const segs = path.split('.');
+        const last = segs[segs.length - 1];
+        const valStr = (typeof value === 'string') ? JSON.stringify(value) : String(value);
+        if (/^\d+$/.test(last)) {                       // array element, e.g. Position.0
+          const parentKey = segs[segs.length - 2], idx = +last;
+          const am = new RegExp('"' + esc(parentKey) + '"\\s*:\\s*\\[').exec(out);
+          if (!am) return null;
+          let i = am.index + am[0].length, count = 0, done = false;
+          while (i < out.length) {
+            while (i < out.length && /\s/.test(out[i])) i++;
+            if (out[i] === ']') return null;
+            const start = i;
+            while (i < out.length && /[-\d.eE+]/.test(out[i])) i++;
+            if (i === start) return null;
+            if (count === idx) { out = out.slice(0, start) + valStr + out.slice(i); done = true; break; }
+            count++;
+            while (i < out.length && out[i] !== ',' && out[i] !== ']') i++;
+            if (out[i] !== ',') return null;
+            i++;
+          }
+          if (!done) return null;
+        } else {                                        // object scalar by key
+          const re = new RegExp('("' + esc(last) + '"\\s*:\\s*)(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?|"(?:[^"\\\\]|\\\\.)*"|true|false|null)');
+          if (!re.test(out)) return null;
+          out = out.replace(re, (m, p1) => p1 + valStr);
+        }
+      }
+      return out;
+    }
+    const src = (f, l) => f ? `<div class="src"><a href="vscode://file/${esc(f)}:${l || 1}" title="${esc(f)}:${l || 1}">📄 ${esc(baseName(f))}:${l || 1}</a></div>` : '';
+    const dotIcon = (color, size = 13) => L.divIcon({ className: 'dz-dot',
+      html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid #0c0f13;box-shadow:0 0 0 1px ${color}80"></div>`,
+      iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
+
+    // ---- toast ----
+    let toastT = null;
+    function toast(msg, kind = '') {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.className = 'show ' + kind;
+      clearTimeout(toastT); toastT = setTimeout(() => t.className = '', 4200);
+    }
+
+    // ---- editing state + registry ----
+    const HAS_TAURI = !!(window.__TAURI__ && window.__TAURI__.core);
+    const invoke = (...a) => window.__TAURI__.core.invoke(...a);
+    const editEntities = [];          // {kind,file,x,z,posKey,radiusKey,radius,marker,group,style,ring,id}
+    window.DZ = { ents: {}, setRadius: null };
+    let editMode = false;
+
+    function detectIndent(text) {
+      const m = text.match(/\n([ \t]+)\S/);
+      if (!m) return 1;
+      return m[1].includes('\t') ? '\t' : m[1].length;
+    }
+    // backend abstraction: Tauri (future packaged app) or the local Python server (now)
+    async function apiRead(path) {
+      if (HAS_TAURI) return invoke('read_file', { path });
+      const r = await fetch('/api/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+      const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j.content;
+    }
+    async function apiSave(path, content) {
+      if (HAS_TAURI) return invoke('save_file', { path, content });
+      const r = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, content }) });
+      const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j;
+    }
+    async function apiDelete(path) {
+      if (HAS_TAURI) return invoke('delete_file', { path });
+      const r = await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+      const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j;
+    }
+    async function saveEntity(ent) {
+      try {
+        const text = await apiRead(ent.file);
+        const edits = [];
+        if (ent.posPath) {
+          if (ent.posKind === 'objXZ') edits.push({ path: ent.posPath + '.x', value: round2(ent.x) }, { path: ent.posPath + '.z', value: round2(ent.z) });
+          else edits.push({ path: ent.posPath + '.0', value: round2(ent.x) }, { path: ent.posPath + '.2', value: round2(ent.z) });
+        }
+        if (ent.values) for (const [k, v] of Object.entries(ent.values)) if (v != null) edits.push({ path: k, value: v });
+        const expected = JSON.parse(text);
+        for (const e of edits) setPath(expected, e.path, e.value);
+        // try surgical (minimal-diff); verify it parses to the intended object, else reformat
+        let out = surgicalPatch(text, edits);
+        if (out !== null) { try { if (JSON.stringify(JSON.parse(out)) !== JSON.stringify(expected)) out = null; } catch (e) { out = null; } }
+        if (out === null) out = JSON.stringify(expected, null, detectIndent(text));
+        const res = await apiSave(ent.file, out);
+        toast(`✔ Saved ${baseName(ent.file)} — backup: ${baseName(res.backup)}`, 'ok');
+      } catch (e) { toast('✖ Save failed: ' + e, 'err'); }
+    }
+    // re-read a file from disk and refresh the entity (used after restore)
+    async function reloadEntity(ent) {
+      const obj = JSON.parse(await apiRead(ent.file));
+      if (ent.posPath) {
+        const c = getPath(obj, ent.posPath);
+        if (ent.posKind === 'objXZ' && c) { ent.x = c.x; ent.z = c.z; }
+        else if (Array.isArray(c)) { ent.x = c[0]; ent.z = c[2]; }
+      }
+      if (ent.values) for (const k of Object.keys(ent.values)) { const v = getPath(obj, k); if (v !== undefined) ent.values[k] = v; }
+      (ent.editFields || []).forEach(f => { if (f.isRadius) ent.radius = ent.values[f.key]; });
+      ent.marker.setLatLng(ll(ent.x, ent.z));
+      if (ent.values.Enabled != null && ent.style) ent.style.dashArray = (+ent.values.Enabled ? null : '5');
+      rebuildRing(ent);
+      const nm = ent.values.m_DisplayName ?? ent.values.NPCName ?? ent.values.MissionName;
+      if (nm != null && ent.marker.getTooltip()) ent.marker.setTooltipContent(String(nm));
+      ent.marker.setPopupContent(ent.popup());
+    }
+    function rebuildRing(ent) {
+      if (!ent.hasRing) return;
+      if (ent.ring) ent.group.removeLayer(ent.ring);
+      if (ent.radius > 0) { ent.ring = worldCircle(ent.x, ent.z, ent.radius, ent.style); ent.group.addLayer(ent.ring); }
+    }
+    window.DZ.save = (id) => {
+      const ent = window.DZ.ents[id]; if (!ent) return;
+      (ent.editFields || []).forEach((f, i) => {
+        const el = document.getElementById(`f-${ent.id}-${i}`); if (!el) return;
+        let v = el.value;
+        if (f.kind === 'num') { v = parseFloat(v); if (!isFinite(v)) return; }
+        ent.values[f.key] = v;
+        if (f.isRadius) ent.radius = v;
+      });
+      if (ent.values.Enabled != null && ent.style) ent.style.dashArray = (+ent.values.Enabled ? null : '5');
+      rebuildRing(ent);
+      const nm = ent.values.m_DisplayName ?? ent.values.NPCName ?? ent.values.MissionName;
+      if (nm != null && ent.marker.getTooltip()) ent.marker.setTooltipContent(String(nm));
+      ent.marker.setPopupContent(ent.popup());
+      saveEntity(ent);
+    };
+    window.DZ.del = async (id) => {
+      const ent = window.DZ.ents[id]; if (!ent) return;
+      if (!confirm(`Delete ${baseName(ent.file)}?\nA timestamped backup is kept, but the entity is removed from the server.`)) return;
+      try {
+        const res = await apiDelete(ent.file);
+        ent.marker.closePopup();
+        ent.group.removeLayer(ent.marker);
+        if (ent.ring) ent.group.removeLayer(ent.ring);
+        const i = editEntities.indexOf(ent); if (i >= 0) editEntities.splice(i, 1);
+        delete window.DZ.ents[id];
+        toast(`🗑 Deleted ${baseName(ent.file)} — backup: ${baseName(res.backup)}`, 'ok');
+      } catch (e) { toast('✖ Delete failed: ' + e, 'err'); }
+    };
+    window.DZ.back = (id) => { const e = window.DZ.ents[id]; if (e) e.marker.setPopupContent(e.popup()); };
+    window.DZ.history = async (id) => {
+      const ent = window.DZ.ents[id]; if (!ent) return;
+      try {
+        const r = await fetch('/api/backups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: ent.file }) });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+        const rows = (j.backups || []).length
+          ? j.backups.map(b => `<div class="hrow"><span>${new Date(b.ts * 1000).toLocaleString()}${b.kind === 'deleted' ? ' 🗑' : b.kind === 'prerestore' ? ' ↩' : ''}</span><button onclick="DZ.restore('${id}', '${b.path.replace(/'/g, "\\'")}')" title="Roll this file back to this version. The current state is backed up first, so this is undoable.">restore</button></div>`).join('')
+          : '<div class="hempty">No backups yet — edits create them.</div>';
+        ent.marker.setPopupContent(`<b>Backups · ${baseName(ent.file)}</b><div class="hist">${rows}</div><button class="hback" onclick="DZ.back('${id}')">← back</button>`);
+      } catch (e) { toast('✖ ' + e, 'err'); }
+    };
+    window.DZ.restore = async (id, backupPath) => {
+      const ent = window.DZ.ents[id]; if (!ent) return;
+      if (!confirm('Restore this backup over the current file?\nThe current state is backed up first.')) return;
+      try {
+        const r = await fetch('/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backup: backupPath, target: ent.file }) });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+        await reloadEntity(ent);
+        toast(`↩ Restored ${baseName(ent.file)} from backup.`, 'ok');
+      } catch (e) { toast('✖ Restore failed: ' + e, 'err'); }
+    };
+    // global backups browser (recovers deleted entities too — their markers are gone)
+    window.DZ.closeBackups = () => { document.getElementById('backups').style.display = 'none'; };
+    window.DZ.openBackups = async () => {
+      try {
+        const r = await fetch('/api/all_backups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+        const rows = (j.backups || []).length ? j.backups.map(b => {
+          const k = b.kind === 'deleted' ? '🗑 deleted' : b.kind === 'prerestore' ? '↩ pre-restore' : '✎ edit';
+          return `<div class="hrow"><span>${new Date(b.ts * 1000).toLocaleString()} · ${k}<br><small>${b.name}${b.targetExists ? '' : ' — file currently missing'}</small></span>` +
+            `<button onclick="DZ.restoreGlobal('${b.backup.replace(/'/g, "\\'")}', '${b.target.replace(/'/g, "\\'")}')" title="Restore this backup over the target file. The page reloads afterwards to show the result.">restore</button></div>`;
+        }).join('') : '<div class="hempty">No backups yet — editing/deleting creates them.</div>';
+        document.getElementById('backupsList').innerHTML = rows;
+        document.getElementById('backups').style.display = 'block';
+      } catch (e) { toast('✖ ' + e, 'err'); }
+    };
+    window.DZ.restoreGlobal = async (backup, target) => {
+      if (!confirm('Restore this backup over the target file?\nThe page reloads afterwards to show the result.')) return;
+      try {
+        const r = await fetch('/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backup, target }) });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+        location.reload();
+      } catch (e) { toast('✖ Restore failed: ' + e, 'err'); }
+    };
+    document.getElementById('backupsBtn').addEventListener('click', () => window.DZ.openBackups());
+    function registerEditable(ent) {
+      ent.id = ent.kind + '_' + editEntities.length;
+      editEntities.push(ent); window.DZ.ents[ent.id] = ent;
+      ent.marker.options.draggable = true;
+      ent.marker.on('add', () => ent.marker.dragging && (editMode ? ent.marker.dragging.enable() : ent.marker.dragging.disable()));
+      ent.marker.on('dragend', () => {
+        const w = latLngToWorld(ent.marker.getLatLng());
+        ent.x = round2(w.X); ent.z = round2(w.Z);
+        rebuildRing(ent); saveEntity(ent);
+        ent.marker.setPopupContent(ent.popup());
+      });
+      return ent;
+    }
+    function setEditMode(on) {
+      editMode = on; document.body.classList.toggle('editing', on);
+      editEntities.forEach(e => e.marker.dragging && (on ? e.marker.dragging.enable() : e.marker.dragging.disable()));
+      if (on) toast('Edit mode on — drag a marker to move it, or edit a radius. Changes save with a backup.');
+    }
+    document.getElementById('editToggle').addEventListener('change', e => setEditMode(e.target.checked));
+    const FIELD_TIP = {
+      'Name': 'The name shown for this on the map.',
+      'Radius m': 'Size of the circle around this point, in metres.',
+      'Range m': 'How close a player must get to complete this objective, in metres.',
+      'Buy %': 'What players pay to buy here (100 = base price).',
+      'Sell %': "What players get when selling here. -1 means this trader won't buy from players.",
+      'Enabled': '1 = active, 0 = turned off.',
+      'Text': 'The objective text players see.'
+    };
+    const editForm = (ent) => {
+      const rows = (ent.editFields || []).map((f, i) => {
+        const v = ent.values[f.key]; const id = `f-${ent.id}-${i}`;
+        const val = (v == null ? '' : String(v)).replace(/"/g, '&quot;');
+        const tip = (FIELD_TIP[f.label] || '').replace(/"/g, '&quot;');
+        return `<div class="erow"><label title="${tip}">${f.label}</label><input id="${id}" type="${f.kind === 'num' ? 'number' : 'text'}" value="${val}" title="${tip}"></div>`;
+      }).join('');
+      return `<div class="eform">${rows}<div class="ebtns"><button onclick="DZ.save('${ent.id}')" title="Save these changes to the file (the previous version is backed up).">💾 Save</button><button onclick="DZ.history('${ent.id}')" title="See this file's backups and restore an earlier version.">↩ History</button><button class="del" onclick="DZ.del('${ent.id}')" title="Remove this from the server. A backup is kept so you can undo it from Backups.">🗑 Delete</button></div></div>`;
+    };
+
+    // ---- load + render ----
+    const loadData = async () => {
+      try { const r = await fetch('/api/data'); if (r.ok) return await r.json(); } catch (e) {}
+      return await (await fetch('data.json')).json();
+    };
+    loadData().then(D => {
+      initMap((D.map && D.map.worldSize) || 16384);
+      const C = { traderZones:'#f1af41', traderObjects:'#caa973', questNPCs:'#7fd1ff',
+        questObjectives:'#6ee7a8', aiObjectives:'#ff6b6b', airdrops:'#38bdf8',
+        contaminated:'#a3e635', eventSpawns:'#9bb4cf', territories:'#c084fc', turrets:'#ff9d3c' };
+      const SPECIES = { zombie:'#ff5c7a', wolf:'#c084fc', arcticwolf:'#a5b4fc', bear:'#f59e0b',
+        polarbear:'#e2e8f0', cattle:'#f0abfc', hen:'#fde047', pig:'#fbcfe8',
+        red_deer:'#fca5a5', roe_deer:'#fdba74', sheep_goat:'#bef264', wild_boar:'#d6a06a' };
+      const overlays = {};
+      const G = (name, on = true) => { const g = L.layerGroup(); if (on) g.addTo(map); overlays[name] = g; return g; };
+
+      // trader zones (editable: move + name + radius + buy/sell) — factory reused for place-new
+      let g;
+      const gTZ = G('Trader zones');
+      function makeTraderZone(t) {
+        const style = { color: C.traderZones, weight: 2, fillColor: C.traderZones, fillOpacity: 0.10 };
+        const ent = { kind: 'tz', file: t.file, line: t.line, x: t.x, z: t.z, radius: t.radius,
+          posKind: 'arrayXZ', posPath: 'Position', hasRing: true, group: gTZ, style,
+          values: { m_DisplayName: t.name, Radius: t.radius, BuyPricePercent: t.buy, SellPricePercent: t.sell },
+          editFields: [ { key: 'm_DisplayName', label: 'Name', kind: 'text' }, { key: 'Radius', label: 'Radius m', kind: 'num', isRadius: true },
+            { key: 'BuyPricePercent', label: 'Buy %', kind: 'num' }, { key: 'SellPricePercent', label: 'Sell %', kind: 'num' } ] };
+        ent.marker = L.marker(ll(t.x, t.z), { icon: dotIcon(C.traderZones), draggable: true })
+          .bindTooltip(esc(t.name), { permanent: true, direction: 'top', className: 'zone-label' });
+        ent.popup = () => `<b>${esc(ent.values.m_DisplayName)}</b><br>Trader zone · ${t.stock} items${editForm(ent)}${src(t.file, t.line)}`;
+        registerEditable(ent); ent.marker.bindPopup(() => ent.popup());
+        gTZ.addLayer(ent.marker); rebuildRing(ent);
+        return ent;
+      }
+      D.layers.traderZones.forEach(makeTraderZone);
+
+      g = G('Trader objects');
+      D.layers.traderObjects.forEach(o => {
+        L.circleMarker(ll(o.x, o.z), { radius: 3, color: C.traderObjects, weight: 1, fillColor: C.traderObjects, fillOpacity: 0.9 })
+          .addTo(g).bindTooltip(esc(o.class), { direction: 'top' })
+          .bindPopup(`<b>${esc(o.class)}</b><br>${esc(o.group || '')}${src(o.file, o.line)}`);
+      });
+
+      // quest NPCs (editable: move) — factory reused for place-new
+      const gNPC = G('Quest NPCs');
+      function makeNPC(n) {
+        const ent = { kind: 'npc', file: n.file, line: n.line, x: n.x, z: n.z, posKind: 'arrayXZ', posPath: 'Position', group: gNPC,
+          values: { NPCName: n.name }, editFields: [ { key: 'NPCName', label: 'Name', kind: 'text' } ] };
+        ent.marker = L.marker(ll(n.x, n.z), { icon: dotIcon(C.questNPCs), draggable: true })
+          .bindTooltip(esc(n.name), { direction: 'top' });
+        ent.popup = () => `<b>${esc(ent.values.NPCName)}</b> (NPC #${n.id})<br><code>${esc(n.className)}</code>${editForm(ent)}${src(n.file, n.line)}`;
+        registerEditable(ent); ent.marker.bindPopup(() => ent.popup()); gNPC.addLayer(ent.marker);
+        return ent;
+      }
+      D.layers.questNPCs.forEach(makeNPC);
+
+      // quest objectives (editable: move + range) — factory reused for place-new
+      const gObj = G('Quest objectives');
+      function makeObjective(o) {
+        const style = { color: C.questObjectives, weight: 1, fillColor: C.questObjectives, fillOpacity: 0.06, dashArray: '4' };
+        const ent = { kind: 'obj', file: o.file, line: o.line, x: o.x, z: o.z, radius: o.radius,
+          posKind: 'arrayXZ', posPath: 'Position', hasRing: true, group: gObj, style,
+          values: { ObjectiveText: o.text, MaxDistance: o.radius },
+          editFields: [ { key: 'ObjectiveText', label: 'Text', kind: 'text' }, { key: 'MaxDistance', label: 'Range m', kind: 'num', isRadius: true } ] };
+        ent.marker = L.marker(ll(o.x, o.z), { icon: dotIcon(C.questObjectives), draggable: true })
+          .bindTooltip(o.typeName, { direction: 'top' });
+        ent.popup = () => `<b>${o.typeName}</b> obj #${o.id}${editForm(ent)}${src(o.file, o.line)}`;
+        registerEditable(ent); ent.marker.bindPopup(() => ent.popup()); gObj.addLayer(ent.marker); rebuildRing(ent);
+        return ent;
+      }
+      D.layers.questObjectives.forEach(makeObjective);
+
+      g = G('AI patrols');
+      D.layers.aiObjectives.forEach(a => {
+        const path = a.waypoints.map(p => ll(p[0], p[1]));
+        if (path.length) L.polyline(path, { color: C.aiObjectives, weight: 2 }).addTo(g)
+          .bindPopup(`<b>${a.typeName}</b> ${esc(a.name)}<br>${a.count} AI · ${path.length} waypoints${src(a.file, a.line)}`);
+      });
+
+      // airdrops (editable: move + radius + name + enabled) — DropLocation.{x,z,Radius}
+      const gAir = G('Airdrops');
+      D.layers.airdrops.forEach(a => {
+        const style = { color: C.airdrops, weight: 2, fillColor: C.airdrops, fillOpacity: 0.08, dashArray: a.enabled ? null : '5' };
+        const ent = { kind: 'air', file: a.file, line: a.line, x: a.x, z: a.z, radius: a.radius,
+          posKind: 'objXZ', posPath: 'DropLocation', hasRing: true, group: gAir, style,
+          values: { MissionName: a.name, 'DropLocation.Radius': a.radius, Enabled: a.enabled },
+          editFields: [ { key: 'MissionName', label: 'Name', kind: 'text' }, { key: 'DropLocation.Radius', label: 'Radius m', kind: 'num', isRadius: true },
+            { key: 'Enabled', label: 'Enabled', kind: 'num' } ] };
+        ent.marker = L.marker(ll(a.x, a.z), { icon: dotIcon(C.airdrops), draggable: true }).bindTooltip(esc(a.name), { direction: 'top' });
+        ent.popup = () => `<b>${esc(ent.values.MissionName)}</b><br>Airdrop · ${+ent.values.Enabled ? 'enabled' : 'disabled'}${editForm(ent)}${src(a.file, a.line)}`;
+        registerEditable(ent); ent.marker.bindPopup(() => ent.popup());
+        gAir.addLayer(ent.marker); rebuildRing(ent);
+      });
+
+      // contaminated areas (editable: move + radius + name + enabled) — Data.Pos[] / Data.Radius
+      const gCont = G('Contaminated areas');
+      D.layers.contaminated.forEach(a => {
+        const style = { color: C.contaminated, weight: 2, fillColor: C.contaminated, fillOpacity: 0.08, dashArray: a.enabled ? null : '5' };
+        const ent = { kind: 'cont', file: a.file, line: a.line, x: a.x, z: a.z, radius: a.radius,
+          posKind: 'arrayXZ', posPath: 'Data.Pos', hasRing: true, group: gCont, style,
+          values: { MissionName: a.name, 'Data.Radius': a.radius, Enabled: a.enabled },
+          editFields: [ { key: 'MissionName', label: 'Name', kind: 'text' }, { key: 'Data.Radius', label: 'Radius m', kind: 'num', isRadius: true },
+            { key: 'Enabled', label: 'Enabled', kind: 'num' } ] };
+        ent.marker = L.marker(ll(a.x, a.z), { icon: dotIcon(C.contaminated), draggable: true }).bindTooltip(esc(a.name), { direction: 'top' });
+        ent.popup = () => `<b>${esc(ent.values.MissionName)}</b><br>Contaminated · ${+ent.values.Enabled ? 'enabled' : 'disabled'}${editForm(ent)}${src(a.file, a.line)}`;
+        registerEditable(ent); ent.marker.bindPopup(() => ent.popup());
+        gCont.addLayer(ent.marker); rebuildRing(ent);
+      });
+
+      // automated turrets (read-only markers + guard-radius rings)
+      const gTur = G('🔫 Turrets', false);
+      (D.layers.turrets || []).forEach(t => {
+        if (t.guard > 0) gTur.addLayer(worldCircle(t.x, t.z, t.guard, { color: C.turrets, weight: 1, fillColor: C.turrets, fillOpacity: 0.04, dashArray: '3' }));
+        L.circleMarker(ll(t.x, t.z), { radius: 4, color: C.turrets, weight: 1, fillColor: C.turrets, fillOpacity: 0.9 })
+          .addTo(gTur).bindTooltip(esc(t.class), { direction: 'top' })
+          .bindPopup(`<b>${esc(t.class)}</b><br>🔫 Turret${t.group ? ' · ' + esc(t.group) : ''}<br>Ammo: ${esc(t.ammo || '—')}<br>${t.rpm} RPM · ${t.hit}% hit · ${t.guard}m guard${src(t.file, t.line)}`);
+      });
+
+      // DNA Keycards crates (filled) & strongroom vaults (hollow), colour-coded by tier
+      const DNA_C = { Yellow: '#f5d90a', Green: '#4caf50', Blue: '#3b82f6', Purple: '#a855f7', Red: '#ef4444' };
+      const gDna = G('🔑 Keycard crates/vaults', false);
+      const dnaIcon = (color, kind) => {
+        const s = kind === 'strongroom' ? 15 : 11;
+        const inner = kind === 'strongroom'
+          ? `width:${s}px;height:${s}px;border-radius:2px;background:${color}40;border:2px solid ${color};box-shadow:0 0 4px ${color}80;`
+          : `width:${s}px;height:${s}px;border-radius:50%;background:${color};border:2px solid #0c0f13;box-shadow:0 0 0 1px ${color}80;`;
+        return L.divIcon({ className: 'dz-dot', html: `<div style="${inner}"></div>`, iconSize: [s, s], iconAnchor: [s / 2, s / 2] });
+      };
+      async function saveDnaSlot(file, key, idx, x, y, z) {
+        const raw = await apiRead(file), obj = JSON.parse(raw);
+        if (!obj[key] || !obj[key][idx]) throw new Error('slot not found');
+        const im = raw.match(/\n([ \t]+)\S/), ind = im ? (im[1].includes('\t') ? '\t' : im[1].length) : 2;
+        obj[key][idx].dna_Location = `${x} ${y} ${z}`;
+        return apiSave(file, JSON.stringify(obj, null, ind));
+      }
+      function dnaMarker(p) {
+        const c = DNA_C[p.color] || '#ffffff';
+        const m = L.marker(ll(p.x, p.z), { icon: dnaIcon(c, p.kind), draggable: editMode });
+        m.bindTooltip(`${p.color} ${p.kind}`, { direction: 'top' });
+        m.bindPopup(() => {
+          const d = document.createElement('div');
+          d.innerHTML = `<b>${esc(p.color)} ${esc(p.kind)}</b><br>🔑 DNA Keycards · slot #${(p.idx || 0) + 1}<br>${Math.round(p.x)}, ${Math.round(p.z)}`;
+          const clr = document.createElement('button'); clr.className = 'minibtn'; clr.textContent = '🧹 Clear (back to dynamic)'; clr.title = 'Free this slot (set to 0 0 0) so this tier can spawn dynamically again.';
+          clr.onclick = async () => { try { const r = await saveDnaSlot(p.file, p.key, p.idx, 0, 0, 0); m.closePopup(); gDna.removeLayer(m); const i = editEntities.findIndex(e => e.marker === m); if (i >= 0) editEntities.splice(i, 1); toast(`🧹 Cleared ${p.color} ${p.kind} slot #${(p.idx || 0) + 1} — backup: ${baseName(r.backup)}`, 'ok'); } catch (e) { toast('✖ Clear failed: ' + e, 'err'); } };
+          d.appendChild(clr);
+          const s = document.createElement('div'); s.innerHTML = src(p.file, p.line); d.appendChild(s);
+          return d;
+        });
+        m.on('add', () => m.dragging && (editMode ? m.dragging.enable() : m.dragging.disable()));
+        m.on('dragend', async () => {
+          const w = latLngToWorld(m.getLatLng());
+          try { const r = await saveDnaSlot(p.file, p.key, p.idx, round2(w.X), p.y || 0, round2(w.Z)); p.x = round2(w.X); p.z = round2(w.Z); toast(`✔ Moved ${p.color} ${p.kind} — backup: ${baseName(r.backup)}`, 'ok'); }
+          catch (e) { toast('✖ Move failed: ' + e, 'err'); }
+        });
+        editEntities.push({ marker: m }); m.addTo(gDna); return m;
+      }
+      (D.layers.dna || []).forEach(dnaMarker);
+
+      D.layers.territories.forEach(t => {
+        const c = SPECIES[t.species] || C.territories;
+        const gt = G(`🐾 ${t.species} (${t.zones.length})`, false);
+        t.zones.forEach(z => {
+          L.circleMarker(ll(z[0], z[1]), { radius: 3, color: c, weight: 0, fillColor: c, fillOpacity: 0.75 })
+            .addTo(gt).bindTooltip(`${esc(t.species)} spawn zone`, { direction: 'top' })
+            .bindPopup(`<b>${esc(t.species)}</b> territory<br>spawn zone · r ${z[2]} m${src(t.file, t.line)}`);
+        });
+      });
+
+      const ge = G('Event spawns', false);
+      D.layers.eventSpawns.forEach(ev => ev.points.forEach(p => {
+        L.circleMarker(ll(p[0], p[1]), { radius: 4, color: C.eventSpawns, weight: 1, fillColor: C.eventSpawns, fillOpacity: 0.75 })
+          .addTo(ge).bindTooltip(esc(ev.event), { direction: 'top' })
+          .bindPopup(`<b>${esc(ev.event)}</b><br>event spawn point${src(ev.file, ev.line)}`);
+      }));
+
+      const layerCtl = L.control.layers(null, overlays, { collapsed: false, position: 'topright' }).addTo(map);
+      layerCtl.getContainer().title = 'Tick a layer to show it on the map, untick to hide it. Territories and event spawns start hidden.';
+
+      // ---- scan ALL files for coordinates (best-effort, on demand) + per-file filter ----
+      let coordLayer = null, coordPoints = [], coordHidden = {};
+      const scanFn = p => p.file.split(/[\\/]/).pop();
+      function renderCoordLayer() {
+        if (coordLayer) { map.removeLayer(coordLayer); layerCtl.removeLayer(coordLayer); }
+        coordLayer = L.layerGroup(); let shown = 0;
+        coordPoints.forEach(p => {
+          const fn = scanFn(p); if (coordHidden[fn]) return; shown++;
+          L.circleMarker(ll(p.x, p.z), { radius: 3, color: '#e879f9', weight: 1, fillColor: '#e879f9', fillOpacity: 0.85 })
+            .addTo(coordLayer).bindTooltip(esc(p.label), { direction: 'top' })
+            .bindPopup(`<b>${esc(p.label)}</b><br>📍 ${esc(fn)} · ${Math.round(p.x)}, ${Math.round(p.z)}${src(p.file, 1)}`);
+        });
+        coordLayer.addTo(map);
+        layerCtl.addOverlay(coordLayer, `📍 Scanned coords (${shown})`);
+      }
+      function buildScanFilter() {
+        const byFile = {}; coordPoints.forEach(p => { const fn = scanFn(p); byFile[fn] = (byFile[fn] || 0) + 1; });
+        const files = Object.keys(byFile).sort();
+        document.getElementById('scanfilter-list').innerHTML = files.map(fn =>
+          `<label class="sf-row" title="${fn}"><input type="checkbox" data-fn="${fn}" ${coordHidden[fn] ? '' : 'checked'}><span class="sf-nm">${fn}</span><span class="sf-ct">${byFile[fn]}</span></label>`).join('');
+        document.querySelectorAll('#scanfilter-list input[data-fn]').forEach(cb => cb.onchange = () => { coordHidden[cb.dataset.fn] = !cb.checked; renderCoordLayer(); });
+        document.getElementById('scanfilter').style.display = 'block';
+      }
+      async function scanCoords() {
+        const btn = document.getElementById('scanBtn'); const orig = btn.textContent; btn.textContent = '⏳ Scanning…';
+        try {
+          const j = await fetch('/api/coordscan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json());
+          coordPoints = j.points; coordHidden = {};
+          renderCoordLayer(); buildScanFilter();
+          toast(`Found ${j.points.length} coordinate${j.points.length !== 1 ? 's' : ''} across ${j.scanned} files${j.capped ? ' (capped at 4000)' : ''}. Filter them top-left.`, 'ok');
+          btn.textContent = '🔍 Re-scan coordinates';
+        } catch (e) { toast('Scan failed: ' + e, 'err'); btn.textContent = orig; }
+      }
+      document.getElementById('scanBtn').addEventListener('click', scanCoords);
+      document.getElementById('scanfilter-close').onclick = () => document.getElementById('scanfilter').style.display = 'none';
+      document.getElementById('scan-all').onclick = () => { coordHidden = {}; buildScanFilter(); renderCoordLayer(); };
+      document.getElementById('scan-none').onclick = () => { coordPoints.forEach(p => coordHidden[scanFn(p)] = true); buildScanFilter(); renderCoordLayer(); };
+      setEditMode(false);  // ensure all editable markers start non-draggable
+
+      // ---- place-new entities (click to add) ----
+      const editbar = document.getElementById('editbar');
+      let placing = null;
+      const ADD_KINDS = {
+        travel: { kind: 'objective', type: 3, label: 'Travel objective' },
+        target: { kind: 'objective', type: 2, label: 'Target objective' },
+        npc:    { kind: 'npc', label: 'Quest NPC' },
+        tz:     { kind: 'traderzone', label: 'Trader zone' },
+      };
+      const sel = document.createElement('select'); sel.className = 'placesel';
+      sel.title = 'Choose what kind of thing to add to the map.';
+      sel.innerHTML = Object.entries(ADD_KINDS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+      const addBtn = document.createElement('button'); addBtn.className = 'placebtn'; addBtn.textContent = '➕ Place';
+      addBtn.title = 'Click this, then click a spot on the map to drop a new one. A new file is created, ready to edit in its popup.';
+      addBtn.onclick = () => {
+        if (!editMode) { document.getElementById('editToggle').checked = true; setEditMode(true); }
+        placing = ADD_KINDS[sel.value]; document.getElementById('map').style.cursor = 'crosshair';
+        toast(`Click the map to place a new ${placing.label}.`);
+      };
+      editbar.appendChild(sel); editbar.appendChild(addBtn);
+
+      // DNA Keycards: place crates/strongrooms by filling the Main config's location slots
+      async function placeDna(color, kind, X, Z) {
+        if (!window.__dnaMain) { toast('DNA Keycards Main config not found.', 'err'); return; }
+        const raw = await apiRead(window.__dnaMain), obj = JSON.parse(raw);
+        const key = `m_DNA${color}_${kind === 'strongroom' ? 'Strongroom' : 'Crate'}_Locations`;
+        const arr = obj[key]; if (!arr || !arr.length) { toast('No ' + key + ' in config.', 'err'); return; }
+        const idx = arr.findIndex(s => { const l = String(s.dna_Location || '').split(/\s+/); return !((parseFloat(l[0]) || 0) || (parseFloat(l[2]) || 0)); });
+        if (idx < 0) { toast(`All ${arr.length} ${color} ${kind} slots are in use — free one in the Keycards editor.`, 'err'); return; }
+        const im = raw.match(/\n([ \t]+)\S/), ind = im ? (im[1].includes('\t') ? '\t' : im[1].length) : 2;
+        arr[idx].dna_Location = `${round2(X)} 0 ${round2(Z)}`;
+        const r = await apiSave(window.__dnaMain, JSON.stringify(obj, null, ind));
+        dnaMarker({ color, kind, idx, key, x: round2(X), y: 0, z: round2(Z), file: window.__dnaMain, line: 1 }).openPopup();
+        if (!map.hasLayer(gDna)) map.addLayer(gDna);
+        toast(`✔ Placed ${color} ${kind} (slot #${idx + 1}) — backup: ${baseName(r.backup)}. Set its height (Y) in the Keycards editor.`, 'ok');
+      }
+      fetch('/api/dnakeycards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json()).then(dk => {
+        const mf = (dk.files || []).find(f => /Main_System/i.test(f.name)); if (!mf) return; window.__dnaMain = mf.path;
+        const cs = document.createElement('select'); cs.className = 'placesel'; cs.title = 'Tier'; cs.innerHTML = ['Yellow', 'Green', 'Blue', 'Purple', 'Red'].map(c => `<option>${c}</option>`).join('');
+        const ks = document.createElement('select'); ks.className = 'placesel'; ks.title = 'Crate or strongroom vault'; ks.innerHTML = '<option value="crate">crate</option><option value="strongroom">strongroom</option>';
+        const b = document.createElement('button'); b.className = 'placebtn'; b.textContent = '🔑 Place DNA'; b.title = 'Place a DNA crate/vault: click here, then click the map.';
+        b.onclick = () => { if (!editMode) { document.getElementById('editToggle').checked = true; setEditMode(true); } placing = { dna: true, color: cs.value, kind: ks.value }; document.getElementById('map').style.cursor = 'crosshair'; toast(`Click the map to place a ${cs.value} ${ks.value}.`); };
+        editbar.appendChild(cs); editbar.appendChild(ks); editbar.appendChild(b);
+      }).catch(() => {});
+
+      map.on('click', async (e) => {
+        if (!placing) return;
+        const w = latLngToWorld(e.latlng); const p = placing;
+        placing = null; document.getElementById('map').style.cursor = '';
+        if (p.dna) { await placeDna(p.color, p.kind, w.X, w.Z); return; }
+        try {
+          const r = await fetch('/api/new_entity', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kind: p.kind, type: p.type, x: round2(w.X), z: round2(w.Z) }) });
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+          const ent = p.kind === 'npc' ? makeNPC(j) : p.kind === 'traderzone' ? makeTraderZone(j) : makeObjective(j);
+          if (ent.marker.dragging) ent.marker.dragging.enable();
+          ent.marker.openPopup();
+          toast(`✔ Created ${baseName(j.file)}. Edit its details in the popup.`, 'ok');
+        } catch (err) { toast('✖ Create failed: ' + err, 'err'); }
+      });
+
+      const rows = [
+        ['Trader zones', C.traderZones, D.stats.traderZones],
+        ['Trader objects', C.traderObjects, D.stats.traderObjects],
+        ['Quest NPCs', C.questNPCs, D.stats.questNPCs],
+        ['Quest objectives', C.questObjectives, D.stats.questObjectives],
+        ['Airdrops', C.airdrops, D.stats.airdrops],
+        ['Contaminated', C.contaminated, D.stats.contaminated],
+        ['Event spawns', C.eventSpawns, D.stats.eventPoints],
+        ['🔫 Turrets', C.turrets, D.stats.turrets || 0],
+        ['🔑 Keycard crates/vaults', '#a855f7', D.stats.dna || 0],
+      ];
+      const terrRows = D.layers.territories.map(t => [`🐾 ${t.species}`, SPECIES[t.species] || C.territories, t.zones.length]);
+      const render = (arr) => arr.map(([n, c, ct]) => `<div class="row"><span class="sw" style="background:${c}"></span>${n}<span class="ct">${ct}</span></div>`).join('');
+      document.getElementById('legend').innerHTML = render(rows) +
+        `<div class="row" style="margin-top:6px;border-top:1px solid #2a323d;padding-top:5px;color:#9aa4b2;font-size:11px">Territories — ${D.stats.territoryZones} zones</div>` +
+        render(terrRows);
+
+      const u = D.stats.unplaced;
+      document.getElementById('warn').textContent = `⚠ ${u.questNPCs} NPCs & ${u.questObjectives} objectives are Active but unplaced (0,0,0).`;
+      toast('Tip: toggle ✏️ Edit mode, then drag markers to move them — changes save to your files with a backup.');
+    }).catch(err => {
+      document.getElementById('warn').textContent = 'Could not load data.json — run extract.py and view via http://localhost:8777';
+      console.error(err);
+    });
+  </script>
+</body>
+</html>

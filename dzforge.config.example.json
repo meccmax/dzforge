@@ -1,0 +1,7 @@
+{
+  "serverRoot": "C:\\path\\to\\your\\dayz\\server",
+  "missionFolder": "dayzOffline.chernarusplus",
+  "mapName": "Chernarus",
+  "mapImage": "C:\\path\\to\\your\\map.jpg",
+  "worldSize": 15360
+}
