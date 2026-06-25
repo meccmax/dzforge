@@ -6,6 +6,11 @@ DZ Forge is **config-editing only**. It assumes you already manage your server w
 
 > Runs as a tiny local web app: a Python standard-library server + your browser. No accounts, no telemetry, nothing leaves your machine — except optional SFTP to your own server, and the optional OCR import (see [Privacy & security](#-privacy--security)).
 
+<p align="center">
+  <img src="docs/map.png" alt="DZ Forge live server map — trader zones, quest NPCs, objectives, events and territories on a live map" width="900">
+  <br><em>The live map — trader zones, quest NPCs, objectives, events and territories. Drag markers to move, click to edit.</em>
+</p>
+
 ---
 
 ## ✨ Features
@@ -29,6 +34,15 @@ DZ Forge is **config-editing only**. It assumes you already manage your server w
 | 🔌 **Connections** | Edit local files, or connect to a live server over **SFTP** (key-based). |
 
 Every save is written atomically and the previous version is copied to a timestamped `.bak` — with browse & restore built in throughout.
+
+---
+
+## 📸 Screenshots
+
+| 🔑 Keycards loot editor | 💰 Economy |
+|:---:|:---:|
+| [![Keycards loot editor](docs/keycards.png)](docs/keycards.png) | [![Economy editor](docs/economy.png)](docs/economy.png) |
+| Per-tier weapon/clothing/general loot with attachment slots and a types.xml item picker. | Search & inline-edit 11k+ loot types, with orphan/missing-file detection. |
 
 ---
 

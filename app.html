@@ -437,6 +437,24 @@
       if (b.dataset.view === 'hm') loadHM();
     });
 
+    // deep-link to a section, e.g. #economy or #dna=Weapons (also drives docs screenshots)
+    function applyHashView() {
+      const h = decodeURIComponent((location.hash || '').replace(/^#/, '')); if (!h) return;
+      const [view, arg] = h.split('=');
+      const btn = document.querySelector('.nav[data-view="' + view + '"]'); if (!btn) return;
+      btn.click();
+      if (view === 'dna' && arg) {
+        let n = 0; const t = setInterval(() => {
+          if (typeof dnaFiles !== 'undefined' && dnaFiles.length) {
+            const f = dnaFiles.find(x => x.name.toLowerCase().includes(arg.toLowerCase()));
+            if (f) { clearInterval(t); openDna(f.path); setTimeout(() => { const s = document.querySelector('#dna-editor .lo-sech'); if (s) s.click(); }, 250); }
+          }
+          if (++n > 80) clearInterval(t);
+        }, 100);
+      }
+    }
+    window.addEventListener('hashchange', applyHashView);
+
     // ---- Expansion Loadout editor ----
     let curLoadout = null, CLASSNAMES = null;
     const LO_SLOTS = ['Head','Headgear','Mask','Eyewear','Hands','Gloves','Armband','Body','Vest','Back','Hips','Legs','Feet','Shoulder','Melee'];
@@ -2568,6 +2586,7 @@
     async function boot() {
       try { const c = await api('/api/config', {}); if (!c.valid) { showSetup(c.config || {}); return; } } catch (e) { }
       loadInto($('#tree'), '').catch(x => toast('' + x, 'err'));
+      applyHashView();
     }
     boot();
   </script>
