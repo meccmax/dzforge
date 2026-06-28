@@ -18,7 +18,7 @@ DZ Forge is **config-editing only**. It assumes you already manage your server w
 | Area | What you can do |
 |---|---|
 | 📁 **Files** | Browse the whole server tree; graphical editors for JSON, XML and CFG. Runtime/log files hidden by default. |
-| 🗺️ **Map & quests** | Live map of trader zones, quest NPCs, objectives, AI patrols, airdrops, contaminated areas, event spawns, territories, turrets and DNA keycard crates/vaults. Drag markers to move, place new entities (incl. keycard crates/vaults by tier), edit or clear them in popups. Plus a **"scan all files for coordinates"** layer with a per-file filter. |
+| 🗺️ **Map & quests** | Live map of trader zones, quest NPCs, objectives, AI patrols, airdrops, contaminated areas, event spawns, territories, turrets and DNA keycard crates/vaults. Drag markers to move, place new entities (incl. keycard crates/vaults by tier), edit or clear them in popups. Plus a **"scan every mod & profile for coordinates"** layer that plots anything coordinate-based (AI missions, patrols, spawners, safe zones…) as colour-coded, mission-named markers grouped and toggleable per mod. |
 | 💰 **Economy** | Search 11k+ loot types, edit nominal/min/lifetime/restock/cost inline, detect orphan/missing files, and a **flag fixer** (category/usage/value/tag via dropdowns of valid values from `cfglimitsdefinition`). |
 | 🪙 **Traders** | Per-zone health **Verify**, plus a stock & price editor (buy/sell %, radius, searchable item list with autocomplete). |
 | 🎖️ **Loadouts** | DayZ Expansion loadouts via a visual paper-doll slot editor, copy/paste items, search, verify. |

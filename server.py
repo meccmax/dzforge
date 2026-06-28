@@ -643,30 +643,57 @@ class Handler(SimpleHTTPRequestHandler):
                     return (round(x, 2), round(z, 2))
                 return None
 
-            def add(x, z, label, fp):
+            def group_of(fp):
+                # the mod/source folder a point belongs to (used to colour + name markers)
+                p = fp.replace("\\", "/")
+                for marker in ("/profiles/", "/mpmissions/"):
+                    i = p.lower().find(marker)
+                    if i >= 0:
+                        rest = p[i + len(marker):].split("/")
+                        if marker == "/mpmissions/":
+                            rest = rest[1:]  # drop the mission-folder name itself
+                        return rest[0] if rest and rest[0] else "?"
+                return os.path.basename(os.path.dirname(fp)) or "?"
+
+            def add(x, z, label, fp, group):
                 if len(pts) >= CAP:
                     capped[0] = True
                     return
-                pts.append({"x": x, "z": z, "label": str(label)[:60], "file": fwd(fp)})
+                pts.append({"x": x, "z": z, "label": str(label)[:60], "group": group, "file": fwd(fp)})
 
-            def walk_json(o, key, fp):
+            COORD3 = re.compile(r"^\s*-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?")
+
+            def walk_json(o, key, fp, group, ctx=None):
                 if len(pts) >= CAP:
                     return
                 if isinstance(o, dict):
+                    nm = (o.get("Name") or o.get("name") or o.get("Title") or o.get("title")
+                          or o.get("DisplayName") or o.get("MissionName"))
+                    myctx = str(nm)[:48] if nm else ctx
                     if "x" in o and "z" in o:
                         r = okxz(o.get("x"), o.get("z"))
                         if r:
-                            add(r[0], r[1], key or o.get("name") or "point", fp)
+                            add(r[0], r[1], nm or key or "point", fp, group)
                     for k, v in o.items():
-                        walk_json(v, k, fp)
+                        walk_json(v, k, fp, group, myctx)
                 elif isinstance(o, list):
                     if key and POS.search(key) and len(o) >= 3 and all(isinstance(n, (int, float)) for n in o[:3]):
                         r = okxz(o[0], o[2])
                         if r:
-                            add(r[0], r[1], key, fp)
+                            add(r[0], r[1], ctx or key, fp, group)
                     else:
                         for it in o:
-                            walk_json(it, key, fp)
+                            walk_json(it, key, fp, group, ctx)
+                elif isinstance(o, str):
+                    # coordinates stored as a string, e.g. "x y z, x y z, ..." (AirborneAI safeZonePositions)
+                    if key and POS.search(key) and o.strip():
+                        for chunk in re.split(r"[;,]", o):
+                            if not COORD3.match(chunk):
+                                continue
+                            nums = chunk.split()
+                            r = okxz(nums[0], nums[2])
+                            if r:
+                                add(r[0], r[1], ctx or key, fp, group)
 
             for base in (MISSION_DIR, os.path.join(EDIT_ROOT, "profiles")):
                 for root, dirs, files in os.walk(base):
@@ -684,10 +711,11 @@ class Handler(SimpleHTTPRequestHandler):
                         except OSError:
                             continue
                         scanned[0] += 1
+                        grp = group_of(fp)
                         try:
                             if ext == ".json":
                                 with open(fp, "r", encoding="utf-8-sig") as f:
-                                    walk_json(json.load(f), None, fp)
+                                    walk_json(json.load(f), None, fp, grp)
                             elif ext == ".map":
                                 with open(fp, "r", encoding="utf-8-sig") as f:
                                     for line in f:
@@ -699,7 +727,7 @@ class Handler(SimpleHTTPRequestHandler):
                                         if len(xyz) >= 3:
                                             r = okxz(xyz[0], xyz[2])
                                             if r:
-                                                add(r[0], r[1], p[0].split(".")[0], fp)
+                                                add(r[0], r[1], p[0].split(".")[0], fp, grp)
                                         if len(pts) >= CAP:
                                             break
                             else:
@@ -708,13 +736,13 @@ class Handler(SimpleHTTPRequestHandler):
                                     if "x" in a and "z" in a:
                                         r = okxz(a["x"], a["z"])
                                         if r:
-                                            add(r[0], r[1], el.tag, fp)
+                                            add(r[0], r[1], el.tag, fp, grp)
                                     elif "pos" in a:
                                         parts = a["pos"].replace(",", " ").split()
                                         if len(parts) >= 3:
                                             r = okxz(parts[0], parts[2])
                                             if r:
-                                                add(r[0], r[1], el.tag, fp)
+                                                add(r[0], r[1], el.tag, fp, grp)
                                     if len(pts) >= CAP:
                                         break
                         except Exception:

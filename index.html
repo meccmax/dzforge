@@ -92,6 +92,7 @@
     #scanfilter { top: 12px; left: 336px; max-width: 250px; max-height: 60vh; overflow-y: auto; }
     #scanfilter .sf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
     .sf-row { display: flex; gap: 6px; align-items: center; font-size: 11px; margin: 2px 0; cursor: pointer; }
+    .sf-sw { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
     .sf-nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sf-ct { color: #7d8794; font-variant-numeric: tabular-nums; }
   </style>
@@ -116,7 +117,7 @@
   <div id="legend" class="panel"></div>
   <div id="toast"></div>
   <div id="scanfilter" class="panel" style="display:none;">
-    <div class="sf-head"><b>📍 Scanned files</b><button id="scanfilter-close" class="minibtn" style="margin-top:0;">✕</button></div>
+    <div class="sf-head"><b>📍 Coordinates by mod</b><button id="scanfilter-close" class="minibtn" style="margin-top:0;">✕</button></div>
     <div style="margin-bottom:6px;"><button id="scan-all" class="minibtn" style="margin-top:0;">all</button> <button id="scan-none" class="minibtn" style="margin-top:0;">none</button></div>
     <div id="scanfilter-list"></div>
   </div>
@@ -569,43 +570,55 @@
       const layerCtl = L.control.layers(null, overlays, { collapsed: false, position: 'topright' }).addTo(map);
       layerCtl.getContainer().title = 'Tick a layer to show it on the map, untick to hide it. Territories and event spawns start hidden.';
 
-      // ---- scan ALL files for coordinates (best-effort, on demand) + per-file filter ----
-      let coordLayer = null, coordPoints = [], coordHidden = {};
+      // ---- scan ALL profile/mission files for coordinates + per-mod colour & filter ----
+      let coordLayer = null, coordPoints = [], coordHidden = {}, groupColor = {};
       const scanFn = p => p.file.split(/[\\/]/).pop();
+      const scanGroup = p => p.group || scanFn(p);
+      // distinct colours assigned to each mod/source group
+      const SCAN_PAL = ['#e879f9', '#f59e0b', '#22d3ee', '#a3e635', '#fb7185', '#60a5fa', '#f472b6',
+        '#34d399', '#c084fc', '#fbbf24', '#2dd4bf', '#fca5a5', '#818cf8', '#4ade80', '#f87171', '#38bdf8'];
+      function assignColors() {
+        groupColor = {};
+        [...new Set(coordPoints.map(scanGroup))].sort().forEach((g, i) => groupColor[g] = SCAN_PAL[i % SCAN_PAL.length]);
+      }
       function renderCoordLayer() {
         if (coordLayer) { map.removeLayer(coordLayer); layerCtl.removeLayer(coordLayer); }
         coordLayer = L.layerGroup(); let shown = 0;
         coordPoints.forEach(p => {
-          const fn = scanFn(p); if (coordHidden[fn]) return; shown++;
-          L.circleMarker(ll(p.x, p.z), { radius: 3, color: '#e879f9', weight: 1, fillColor: '#e879f9', fillOpacity: 0.85 })
-            .addTo(coordLayer).bindTooltip(esc(p.label), { direction: 'top' })
-            .bindPopup(`<b>${esc(p.label)}</b><br>📍 ${esc(fn)} · ${Math.round(p.x)}, ${Math.round(p.z)}${src(p.file, 1)}`);
+          const g = scanGroup(p); if (coordHidden[g]) return; shown++;
+          const c = groupColor[g] || '#e879f9';
+          L.circleMarker(ll(p.x, p.z), { radius: 4, color: c, weight: 1, fillColor: c, fillOpacity: 0.85 })
+            .addTo(coordLayer).bindTooltip(`${esc(g)} · ${esc(p.label)}`, { direction: 'top' })
+            .bindPopup(`<b>${esc(g)}</b><br>${esc(p.label)}<br>📍 ${Math.round(p.x)}, ${Math.round(p.z)} · ${esc(scanFn(p))}${src(p.file, 1)}`);
         });
         coordLayer.addTo(map);
-        layerCtl.addOverlay(coordLayer, `📍 Scanned coords (${shown})`);
+        layerCtl.addOverlay(coordLayer, `📍 Mod coordinates (${shown})`);
       }
       function buildScanFilter() {
-        const byFile = {}; coordPoints.forEach(p => { const fn = scanFn(p); byFile[fn] = (byFile[fn] || 0) + 1; });
-        const files = Object.keys(byFile).sort();
-        document.getElementById('scanfilter-list').innerHTML = files.map(fn =>
-          `<label class="sf-row" title="${fn}"><input type="checkbox" data-fn="${fn}" ${coordHidden[fn] ? '' : 'checked'}><span class="sf-nm">${fn}</span><span class="sf-ct">${byFile[fn]}</span></label>`).join('');
-        document.querySelectorAll('#scanfilter-list input[data-fn]').forEach(cb => cb.onchange = () => { coordHidden[cb.dataset.fn] = !cb.checked; renderCoordLayer(); });
+        const byGroup = {}; coordPoints.forEach(p => { const g = scanGroup(p); byGroup[g] = (byGroup[g] || 0) + 1; });
+        const groups = Object.keys(byGroup).sort();
+        document.getElementById('scanfilter-list').innerHTML = groups.map(g =>
+          `<label class="sf-row" title="${esc(g)}"><input type="checkbox" data-g="${esc(g)}" ${coordHidden[g] ? '' : 'checked'}>` +
+          `<span class="sf-sw" style="background:${groupColor[g] || '#e879f9'}"></span>` +
+          `<span class="sf-nm">${esc(g)}</span><span class="sf-ct">${byGroup[g]}</span></label>`).join('');
+        document.querySelectorAll('#scanfilter-list input[data-g]').forEach(cb => cb.onchange = () => { coordHidden[cb.dataset.g] = !cb.checked; renderCoordLayer(); });
         document.getElementById('scanfilter').style.display = 'block';
       }
       async function scanCoords() {
         const btn = document.getElementById('scanBtn'); const orig = btn.textContent; btn.textContent = '⏳ Scanning…';
         try {
           const j = await fetch('/api/coordscan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json());
-          coordPoints = j.points; coordHidden = {};
+          coordPoints = j.points; coordHidden = {}; assignColors();
           renderCoordLayer(); buildScanFilter();
-          toast(`Found ${j.points.length} coordinate${j.points.length !== 1 ? 's' : ''} across ${j.scanned} files${j.capped ? ' (capped at 4000)' : ''}. Filter them top-left.`, 'ok');
+          const mods = new Set(coordPoints.map(scanGroup)).size;
+          toast(`Found ${j.points.length} coordinate${j.points.length !== 1 ? 's' : ''} across ${mods} mods${j.capped ? ' (capped at 4000)' : ''}. Colour-coded; toggle per mod top-left.`, 'ok');
           btn.textContent = '🔍 Re-scan coordinates';
         } catch (e) { toast('Scan failed: ' + e, 'err'); btn.textContent = orig; }
       }
       document.getElementById('scanBtn').addEventListener('click', scanCoords);
       document.getElementById('scanfilter-close').onclick = () => document.getElementById('scanfilter').style.display = 'none';
       document.getElementById('scan-all').onclick = () => { coordHidden = {}; buildScanFilter(); renderCoordLayer(); };
-      document.getElementById('scan-none').onclick = () => { coordPoints.forEach(p => coordHidden[scanFn(p)] = true); buildScanFilter(); renderCoordLayer(); };
+      document.getElementById('scan-none').onclick = () => { coordPoints.forEach(p => coordHidden[scanGroup(p)] = true); buildScanFilter(); renderCoordLayer(); };
       setEditMode(false);  // ensure all editable markers start non-draggable
 
       // ---- place-new entities (click to add) ----
