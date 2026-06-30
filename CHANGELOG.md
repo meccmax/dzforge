@@ -6,6 +6,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-06-30
+
 ### Added
 - **Plain-language Expansion settings** — friendly labels and hover tips for the
   most-tuned options across Vehicle, Quest, Notification, General, Chat, Map and
@@ -89,4 +91,5 @@ only; every save writes a timestamped backup.
 - Localhost-only binding, path confinement on all file endpoints, no shell
   execution. See [SECURITY.md](SECURITY.md).
 
+[1.1.0]: https://github.com/meccmax/dzforge/releases/tag/v1.1
 [1.0.0]: https://github.com/meccmax/dzforge/releases/tag/v1.0
