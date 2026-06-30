@@ -227,6 +227,13 @@
     #ip-list { overflow:auto; margin-top:8px; }
     .ip-row { padding:4px 8px; cursor:pointer; border-bottom:1px solid var(--line); font-size:12px; }
     .ip-row:hover { background:rgba(127,176,255,0.12); }
+    .q-summary { background:#16202c; border:1px solid var(--line); border-left:3px solid var(--acc); border-radius:6px; padding:7px 10px; margin:0 0 8px; font-size:12.5px; color:#cdd6e0; line-height:1.55; }
+    #qw-ov { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:70; display:none; align-items:center; justify-content:center; }
+    #qw-ov.show { display:flex; }
+    #qw-box { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; width:580px; max-width:94vw; max-height:88vh; overflow:auto; }
+    .qw-sec { margin:12px 0; }
+    .qw-sec > h4 { margin:0 0 6px; font-size:13px; color:var(--acc); border-bottom:1px solid var(--line); padding-bottom:3px; }
+    .qw-prev { background:#16202c; border:1px solid var(--line); border-radius:6px; padding:8px 10px; font-size:12px; color:#cdd6e0; min-height:18px; line-height:1.5; }
     .ecat { cursor:pointer; text-decoration:underline dotted; }
     .jkey.cfgdoc { cursor:help; border-bottom:1px dotted var(--mut); }
     #setup-ov { position:fixed; inset:0; background:var(--bg); z-index:100; display:none; align-items:center; justify-content:center; }
@@ -689,7 +696,27 @@
 
     // ---- Quests (Expansion quest editor) ----
     const OBJ_TYPE_NAME = { 2: 'Target', 3: 'Travel', 4: 'Collection', 5: 'Delivery', 6: 'TreasureHunt', 7: 'AIPatrol', 8: 'AICamp', 9: 'AIVIP', 10: 'Action', 11: 'Crafting' };
+    const OBJ_VERB = { 2: 'Kill', 3: 'Go to', 4: 'Collect', 5: 'Deliver', 6: 'Find', 7: 'Clear patrol', 8: 'Clear camp', 9: 'Escort', 10: 'Do', 11: 'Craft' };
     let curQuest = null, questData = { quests: [], npcs: [], objectives: {} };
+    // plain-language one-liner describing what a quest actually does
+    function questSummary(m) {
+      const npcName = id => { const n = questData.npcs.find(x => x.id === id); return n ? n.name : ('NPC #' + id); };
+      const givers = m.QuestGiverIDs || [], turnIns = m.QuestTurnInIDs || [], objectives = m.Objectives || [], rewards = m.Rewards || [];
+      const parts = [];
+      if (givers.length) parts.push('Talk to ' + npcName(givers[0]));
+      objectives.forEach(o => {
+        const l = questData.objectives[String(o.ObjectiveType)] || []; const f = l.find(x => x.id === o.ID);
+        const verb = OBJ_VERB[o.ObjectiveType] || OBJ_TYPE_NAME[o.ObjectiveType] || 'Do';
+        parts.push((f && f.text) ? `${verb} (${f.text})` : verb);
+      });
+      const altTurn = turnIns.filter(id => !givers.includes(id));
+      if (altTurn.length) parts.push('return to ' + npcName(altTurn[0]));
+      else if (givers.length && objectives.length) parts.push('return to ' + npcName(givers[0]));
+      let s = parts.join('  →  ') || 'No objectives yet — players can\'t complete this quest.';
+      const rew = rewards.filter(r => r && r.ClassName).map(r => r.ClassName + ((r.Amount || 1) > 1 ? ' ×' + r.Amount : ''));
+      if (rew.length) s += '     🎁 ' + rew.join(', ');
+      return s;
+    }
     async function loadQuests() {
       ensureClassnames();
       const list = $('#q-list');
@@ -708,8 +735,11 @@
         `<button class="q-tab${qTab === 'npcs' ? ' on' : ''}" data-t="npcs" title="Quest-giver NPCs.">🧍 NPCs</button></div>`;
       let rows = '', topBtn = '';
       if (qTab === 'quests') {
-        topBtn = `<button class="act" id="q-new" style="margin-bottom:6px;width:100%;" title="Create a brand-new, empty quest (auto-assigns the next free ID).">+ New quest</button><button class="ghost" id="q-audit" style="margin-bottom:8px;width:100%;" title="Scan ALL quests, objectives and NPCs at once for duplicate IDs, broken references, unused objectives and bad reward items.">🔍 Audit all</button>`;
-        rows = questData.quests.map(q => `<div class="trow q-file${+q.active ? '' : ' off'}" data-kind="quest" data-p="${q.file}"><span class="ic">📜</span><span class="qid">#${q.id == null ? '?' : q.id}</span><span class="nm">${esc(q.title || q.name)}</span></div>`).join('');
+        topBtn = `<button class="act" id="q-wizard" style="margin-bottom:6px;width:100%;" title="Guided quest creation — answer a few questions and DZ Forge writes the quest, its objective and (if needed) the NPC for you.">🪄 New quest (wizard)</button><button class="ghost" id="q-new" style="margin-bottom:6px;width:100%;" title="Create a brand-new, empty quest (auto-assigns the next free ID).">+ Blank quest</button><button class="ghost" id="q-audit" style="margin-bottom:8px;width:100%;" title="Scan ALL quests, objectives and NPCs at once for duplicate IDs, broken references, unused objectives and bad reward items.">🔍 Audit all</button>`;
+        rows = questData.quests.map(q => {
+          const sum = questSummary({ QuestGiverIDs: q.givers, QuestTurnInIDs: q.turnIns, Objectives: q.objectives, Rewards: (q.rewards || []).map(c => ({ ClassName: c, Amount: 1 })) });
+          return `<div class="trow q-file${+q.active ? '' : ' off'}" data-kind="quest" data-p="${q.file}" title="${esc(sum)}"><span class="ic">📜</span><span class="qid">#${q.id == null ? '?' : q.id}</span><span class="nm">${esc(q.title || q.name)}</span></div>`;
+        }).join('');
       } else if (qTab === 'objectives') {
         const flat = []; Object.keys(questData.objectives).forEach(t => questData.objectives[t].forEach(o => flat.push(o)));
         flat.sort((a, b) => (a.type - b.type) || (a.id - b.id));
@@ -722,6 +752,7 @@
       list.innerHTML = tabs + `<input id="q-search" class="lo-search" placeholder="🔍 filter…" autocomplete="off" title="Filter the list below.">` + topBtn + rows;
       list.querySelectorAll('.q-tab').forEach(b => b.onclick = () => { qTab = b.dataset.t; renderQuestList(); });
       const nb = document.getElementById('q-new'); if (nb) nb.onclick = questNew;
+      const wb = document.getElementById('q-wizard'); if (wb) wb.onclick = openQuestWizard;
       const ab = document.getElementById('q-audit'); if (ab) ab.onclick = auditQuests;
       const sb = document.getElementById('q-search');
       sb.oninput = () => { const q = sb.value.toLowerCase(); list.querySelectorAll('.q-file').forEach(r => r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none'); };
@@ -836,10 +867,11 @@
       const ed = $('#q-editor'), m = curQuest.model;
       m.Descriptions = m.Descriptions || []; m.Rewards = m.Rewards || []; m.Objectives = m.Objectives || [];
       m.QuestGiverIDs = m.QuestGiverIDs || []; m.QuestTurnInIDs = m.QuestTurnInIDs || []; m.PreQuestIDs = m.PreQuestIDs || [];
-      ed.innerHTML = `<div class="lo-head"><b>📜 ${esc(m.Title || baseName(curQuest.path))} <span style="color:var(--mut);font-weight:400;">#${m.ID == null ? '?' : m.ID}</span></b><button class="act" id="q-save" disabled title="Save this quest. The previous version is backed up automatically.">💾 Save</button><button class="ghost" id="q-verify" title="Check for broken NPC / quest / objective references and bad reward items.">✓ Verify</button><button class="ghost" id="q-dup" title="Save a copy of this quest under a new name and a fresh ID.">⧉ Duplicate</button></div><div id="q-report"></div><div id="q-body"></div>`;
+      ed.innerHTML = `<div class="lo-head"><b>📜 ${esc(m.Title || baseName(curQuest.path))} <span style="color:var(--mut);font-weight:400;">#${m.ID == null ? '?' : m.ID}</span></b><button class="act" id="q-save" disabled title="Save this quest. The previous version is backed up automatically.">💾 Save</button><button class="ghost" id="q-verify" title="Check for broken NPC / quest / objective references and bad reward items.">✓ Verify</button><button class="ghost" id="q-dup" title="Save a copy of this quest under a new name and a fresh ID.">⧉ Duplicate</button></div><div class="q-summary" id="q-summary" title="A plain-language summary of what this quest does, built from its NPCs, objectives and rewards."></div><div id="q-report"></div><div id="q-body"></div>`;
       document.getElementById('q-save').onclick = saveQuest;
       document.getElementById('q-verify').onclick = verifyQuest;
       document.getElementById('q-dup').onclick = questDuplicate;
+      document.getElementById('q-summary').textContent = '📖 ' + questSummary(m);
       const body = $('#q-body');
       const mkCard = (title, build) => { const c = el('div', 'lo-card'); loSection(c, title, 0, build); body.appendChild(c); };
       mkCard('Basics', b => {
@@ -903,6 +935,101 @@
       const maxId = questData.quests.reduce((a, q) => Math.max(a, q.id || 0), 0);
       curQuest = { path: window.__questDir + '/' + name + '.json', model: blankQuest(maxId + 1) };
       renderQuest(); markQuest();
+    }
+    function openQuestWizard() {
+      const npcs = questData.npcs.filter(n => n.id != null);
+      let ov = document.getElementById('qw-ov');
+      if (!ov) { ov = el('div'); ov.id = 'qw-ov'; document.body.appendChild(ov); }
+      ov.innerHTML = `<div id="qw-box">
+        <div class="lo-head" style="position:static;"><b>🪄 Quest Wizard</b><button class="ghost" id="qw-x" style="margin-left:auto;">✕</button></div>
+        <div class="note">Answer a few questions — DZ Forge writes the quest, its objective and (if needed) the NPC for you, and links them up. Fine-tune anything afterwards.</div>
+        <div class="qw-sec"><h4>1 · The quest</h4>
+          <div class="q-field"><label>Title</label><input id="qw-title" class="q-in" placeholder="e.g. Wolves at the Door"></div>
+          <div class="q-field"><label title="What the giver says when offering the quest. %1 = the player's name.">Greeting</label><input id="qw-greet" class="q-in" placeholder="(optional) e.g. Help us, %1!"></div></div>
+        <div class="qw-sec"><h4>2 · Who gives it?</h4>
+          <div class="q-field"><label>Quest giver</label><select id="qw-giver" class="q-in"></select></div>
+          <div id="qw-newnpc"></div></div>
+        <div class="qw-sec"><h4>3 · What must the player do?</h4>
+          <div class="q-field"><label>Task type</label><select id="qw-otype" class="q-in">
+            <option value="2">Kill targets</option><option value="4">Collect items</option>
+            <option value="3">Go to a location</option><option value="5">Deliver an item</option></select></div>
+          <div id="qw-ofields"></div>
+          <div class="q-field"><label title="The task line shown to players. Leave blank to auto-generate.">Task text</label><input id="qw-otext" class="q-in" placeholder="(auto)"></div></div>
+        <div class="qw-sec"><h4>4 · Reward <span style="color:var(--mut);font-weight:400;">(optional)</span></h4>
+          <div class="q-field"><label>Item</label><input id="qw-ritem" class="q-in lo-clsin" list="cls-list" placeholder="reward item class (optional)"></div>
+          <div class="q-field"><label>Amount</label><input id="qw-ramt" class="q-in" type="number" value="1"></div></div>
+        <div class="qw-sec"><h4>Preview</h4><div class="qw-prev" id="qw-prev"></div></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+          <button class="ghost" id="qw-cancel">Cancel</button><button class="act" id="qw-create">✨ Create quest</button></div>
+      </div>`;
+      ov.classList.add('show');
+      const giverSel = ov.querySelector('#qw-giver'), otype = ov.querySelector('#qw-otype'), ofields = ov.querySelector('#qw-ofields'), newNpcWrap = ov.querySelector('#qw-newnpc');
+      const gv = id => { const e = ov.querySelector('#' + id); return e ? e.value.trim() : ''; };
+      function autoText() {
+        const t = otype.value, amt = gv('qw-oamt') || '1';
+        if (t === '2') return `Kill ${amt} ${gv('qw-otarget') || 'targets'}`;
+        if (t === '4') return `Collect ${amt} ${gv('qw-oitem') || 'items'}`;
+        if (t === '3') return `Travel to the marked location`;
+        return `Deliver ${amt} ${gv('qw-oitem') || 'item'}`;
+      }
+      function giverName() { return giverSel.value === '__new__' ? (gv('qw-npcname') || 'a new NPC') : ((npcs.find(n => n.id === +giverSel.value) || {}).name || 'the NPC'); }
+      function updatePreview() {
+        const t = otype.value, amt = gv('qw-oamt') || '1';
+        const verb = OBJ_VERB[+t] || 'Do';
+        const what = (t === '2') ? `${amt} ${gv('qw-otarget') || 'targets'}` : (t === '4' || t === '5') ? `${amt} ${gv('qw-oitem') || 'item'}` : 'the location';
+        const rew = gv('qw-ritem') ? `     🎁 ${gv('qw-ritem')}${(+gv('qw-ramt') > 1) ? ' ×' + gv('qw-ramt') : ''}` : '';
+        ov.querySelector('#qw-prev').textContent = `Talk to ${giverName()}  →  ${verb} (${what})  →  return to ${giverName()}${rew}`;
+      }
+      function renderNewNpc() {
+        newNpcWrap.innerHTML = giverSel.value === '__new__'
+          ? `<div class="q-field"><label>NPC name</label><input id="qw-npcname" class="q-in" placeholder="e.g. Sergeant Bell"></div>
+             <div class="q-field"><label title="Read coordinates off the Map view.">Location X / Z</label><span class="q-chips"><input id="qw-npcx" class="lo-num" type="number" placeholder="X"><input id="qw-npcz" class="lo-num" type="number" placeholder="Z"></span></div>` : '';
+        newNpcWrap.querySelectorAll('input').forEach(i => i.oninput = updatePreview);
+        updatePreview();
+      }
+      function renderOFields() {
+        const t = otype.value;
+        if (t === '2') ofields.innerHTML = `<div class="q-field"><label title="One or more class names, comma-separated (e.g. zombie or AI classes).">Targets</label><input id="qw-otarget" class="q-in lo-clsin" list="cls-list" placeholder="target classes, comma-separated"></div><div class="q-field"><label>How many</label><input id="qw-oamt" class="q-in" type="number" value="5"></div>`;
+        else if (t === '4') ofields.innerHTML = `<div class="q-field"><label>Item</label><input id="qw-oitem" class="q-in lo-clsin" list="cls-list" placeholder="item class to collect"></div><div class="q-field"><label>How many</label><input id="qw-oamt" class="q-in" type="number" value="1"></div>`;
+        else if (t === '3') ofields.innerHTML = `<div class="q-field"><label title="Read coordinates off the Map view.">Location X / Z</label><span class="q-chips"><input id="qw-ox" class="lo-num" type="number" placeholder="X"><input id="qw-oz" class="lo-num" type="number" placeholder="Z"></span></div><div class="q-field"><label>Arrive within (m)</label><input id="qw-orad" class="q-in" type="number" value="20"></div>`;
+        else ofields.innerHTML = `<div class="q-field"><label>Item</label><input id="qw-oitem" class="q-in lo-clsin" list="cls-list" placeholder="item class to deliver"></div><div class="q-field"><label>How many</label><input id="qw-oamt" class="q-in" type="number" value="1"></div>`;
+        ofields.querySelectorAll('input').forEach(i => i.oninput = updatePreview);
+        updatePreview();
+      }
+      giverSel.innerHTML = npcs.map(n => `<option value="${n.id}">#${n.id} ${esc(n.name)}</option>`).join('') + `<option value="__new__">➕ Create a new NPC…</option>`;
+      if (!npcs.length) giverSel.value = '__new__';
+      giverSel.onchange = renderNewNpc; otype.onchange = renderOFields;
+      ov.querySelectorAll('#qw-title,#qw-greet,#qw-ritem,#qw-ramt,#qw-otext').forEach(i => i.oninput = updatePreview);
+      ov.querySelector('#qw-x').onclick = ov.querySelector('#qw-cancel').onclick = () => ov.classList.remove('show');
+      ov.querySelector('#qw-create').onclick = () => createQuestFromWizard(ov, npcs, giverSel, otype, gv, autoText);
+      renderNewNpc(); renderOFields();
+      setTimeout(() => { const ti = ov.querySelector('#qw-title'); if (ti) ti.focus(); }, 30);
+    }
+    async function createQuestFromWizard(ov, npcs, giverSel, otype, gv, autoText) {
+      const title = gv('qw-title'); if (!title) { toast('Give the quest a title', 'err'); return; }
+      const giverNew = giverSel.value === '__new__';
+      if (giverNew && !gv('qw-npcname')) { toast('Name the new NPC', 'err'); return; }
+      const t = +otype.value, objSpec = { type: t, text: gv('qw-otext') || autoText(), amount: +gv('qw-oamt') || 1 };
+      if (t === 2) { objSpec.target = gv('qw-otarget'); if (!objSpec.target) return toast('Enter at least one target class', 'err'); }
+      else if (t === 4 || t === 5) { objSpec.item = gv('qw-oitem'); if (!objSpec.item) return toast('Enter the item class', 'err'); }
+      else if (t === 3) { objSpec.x = +gv('qw-ox') || 0; objSpec.z = +gv('qw-oz') || 0; objSpec.radius = +gv('qw-orad') || 20; objSpec.marker = title; if (!objSpec.x && !objSpec.z) return toast('Enter the location X / Z (read it off the Map)', 'err'); }
+      const giver = giverNew ? { mode: 'new', name: gv('qw-npcname'), x: +gv('qw-npcx') || 0, z: +gv('qw-npcz') || 0 } : { mode: 'existing', id: +giverSel.value };
+      const btn = ov.querySelector('#qw-create'); btn.disabled = true; btn.textContent = '⏳ Creating…';
+      try {
+        const parts = await api('/api/quest_parts', { giver, objectives: [objSpec] });
+        const maxId = questData.quests.reduce((a, q) => Math.max(a, q.id || 0), 0);
+        const m = blankQuest(maxId + 1);
+        m.Title = title; m.ObjectiveText = objSpec.text; m.Descriptions = [gv('qw-greet') || ''];
+        m.QuestGiverIDs = [parts.giverId]; m.QuestTurnInIDs = [parts.giverId];
+        m.Objectives = parts.objectives.map(o => ({ ConfigVersion: 28, ID: o.ID, ObjectiveType: o.ObjectiveType }));
+        if (gv('qw-ritem')) m.Rewards = [{ ClassName: gv('qw-ritem'), Amount: +gv('qw-ramt') || 1, Attachments: [], DamagePercent: 0, HealthPercent: 0, QuestID: -1, Chance: 1.0 }];
+        const slug = (title.replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || ('Quest_' + m.ID)).slice(0, 40);
+        const path = window.__questDir + '/' + slug + '.json';
+        await api('/api/save', { path, content: JSON.stringify(m, null, 4) });
+        ov.classList.remove('show');
+        toast(`✨ Created "${title}" — quest #${m.ID}, objective #${parts.objectives[0].ID}${giverNew ? ', NPC #' + parts.giverId : ''}`, 'ok');
+        await loadQuests(); qTab = 'quests'; renderQuestList(); openQuest(path);
+      } catch (x) { toast('✖ Could not create quest: ' + x, 'err'); btn.disabled = false; btn.textContent = '✨ Create quest'; }
     }
     async function questDuplicate() {
       const name = prompt('Duplicate as (new file name, no extension):', baseName(curQuest.path).replace('.json', '') + '_copy'); if (!name) return;

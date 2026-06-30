@@ -22,7 +22,7 @@ DZ Forge is **config-editing only**. It assumes you already manage your server w
 | 💰 **Economy** | Search 11k+ loot types, edit nominal/min/lifetime/restock/cost inline, detect orphan/missing files, and a **flag fixer** (category/usage/value/tag via dropdowns of valid values from `cfglimitsdefinition`). |
 | 🪙 **Traders** | Per-zone health **Verify**, plus a stock & price editor (buy/sell %, radius, searchable item list with autocomplete). |
 | 🎖️ **Loadouts** | DayZ Expansion loadouts via a visual paper-doll slot editor, copy/paste items, search, verify. |
-| 📜 **Quests** | Full Expansion quest editor — story/dialogue, rewards, reputation, prerequisites, NPC givers, objectives — plus dedicated **Objective** and **NPC** editors and a server-wide **clickable audit**. |
+| 📜 **Quests** | A **Quest Wizard** builds a complete, working quest — quest + objective + NPC, all linked — from a few plain-English questions, hiding the underlying files and IDs. Plus the full editor (story/dialogue, rewards, reputation, prerequisites, NPC givers, objectives), dedicated **Objective**/**NPC** editors, a **plain-language summary** on every quest ("Talk to X → kill 8 wolves → reward Y"), and a server-wide **clickable audit**. |
 | 🧩 **Expansion** | Friendly forms for every `ExpansionMod` settings file (Market, Hardline, Airdrop, AI, Quests, General…). |
 | 🔫 **Turrets** | Meccmax's AutomatedTurrets editor, wired to load/save from the server with backups, plus a turret Verify. |
 | 🎲 **Events** | `db/events.xml` dynamic events: counts, lifetime, restock, flags and the spawn-mix (children). |

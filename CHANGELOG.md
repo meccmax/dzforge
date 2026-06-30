@@ -4,6 +4,23 @@ All notable changes to DZ Forge are documented here.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Quest Wizard** — guided quest creation: answer a few plain-English questions
+  (title, who gives it, what to do, reward) and DZ Forge writes the quest, its
+  objective and — if needed — the NPC, all linked together, with a live preview.
+  Hides the three-file / numeric-ID complexity that makes quest setup confusing.
+- **Plain-language quest summaries** — every quest shows a one-line
+  "Talk to X → kill 8 wolves → return to X 🎁 reward" summary in the editor and as
+  a tooltip in the list.
+- **Per-mod coordinate scanner** — the map's "scan for coordinates" now groups,
+  colour-codes and names markers per mod, parses coordinate-strings (e.g. AirborneAI
+  safe zones), and labels points by mission name. Surfaces AI missions, patrols and
+  spawners that weren't shown before.
+- **Section deep-links** — jump straight to a view via URL hash (e.g. `#economy`,
+  `#dna=Weapons`); shareable and used to render the docs screenshots.
+
 ## [1.0.0] — 2026-06-24
 
 First public release. A graphical, all-in-one editor for DayZ modded servers —

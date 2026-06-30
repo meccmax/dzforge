@@ -556,6 +556,91 @@ class Handler(SimpleHTTPRequestHandler):
                             pass
             return self._json(200, {"dir": fwd(qdir), "quests": quests, "npcs": npcs, "objectives": objectives})
 
+        if route == "/api/quest_parts":
+            # Quest Wizard backend: create the giver NPC (optional) + objective file(s) with
+            # server-allocated IDs, grounded in the real Expansion objective schemas. The quest
+            # file itself is assembled + saved by the front-end (keeps the quest schema in one place).
+            base = os.path.join(EDIT_ROOT, "profiles", "ExpansionMod", "Quests")
+            ndir = os.path.join(base, "NPCs")
+            objs_root = os.path.join(base, "Objectives")
+            if not os.path.isdir(base):
+                return self._json(400, {"error": "No Expansion Quests folder on this server."})
+
+            def _f(v, d=0.0):
+                try: return float(v)
+                except (TypeError, ValueError): return d
+
+            def _i(v, d=0):
+                try: return int(v)
+                except (TypeError, ValueError): return d
+
+            try:
+                out = {"objectives": []}
+                giver = body.get("giver") or {}
+                if giver.get("mode") == "new":
+                    nid = max_id_in([ndir]) + 1
+                    npc = {
+                        "ConfigVersion": 6, "ID": nid, "ClassName": "ExpansionQuestNPCDenis",
+                        "Position": [round(_f(giver.get("x")), 2), 0.0, round(_f(giver.get("z")), 2)],
+                        "Orientation": [0.0, 0.0, 0.0], "NPCName": (giver.get("name") or "Quest Giver"),
+                        "DefaultNPCText": "Hmm?", "Waypoints": [], "NPCEmoteID": 46, "NPCEmoteIsStatic": 0,
+                        "NPCLoadoutFile": "", "NPCInteractionEmoteID": 1, "NPCQuestCancelEmoteID": 60,
+                        "NPCQuestStartEmoteID": 58, "NPCQuestCompleteEmoteID": 39,
+                        "NPCFaction": "InvincibleObservers", "NPCType": 0, "Active": 1,
+                    }
+                    write_new(ndir, f"QuestNPC_{nid}.json", npc)
+                    out["giverId"] = nid
+                else:
+                    out["giverId"] = _i(giver.get("id"))
+
+                all_dirs = [os.path.join(objs_root, d) for d in os.listdir(objs_root)] if os.path.isdir(objs_root) else []
+                nid = max_id_in(all_dirs)
+                for ob in (body.get("objectives") or []):
+                    t = _i(ob.get("type"), 2)
+                    nid += 1
+                    text = (ob.get("text") or "Objective").strip()
+                    x, z, rad = round(_f(ob.get("x")), 2), round(_f(ob.get("z")), 2), _f(ob.get("radius"), 50.0)
+                    amount = _i(ob.get("amount"), 1)
+                    marker = (ob.get("marker") or text)[:32]
+                    if t == 2:  # Target / kill
+                        cls = ob.get("target") or []
+                        if isinstance(cls, str):
+                            cls = [c.strip() for c in re.split(r"[,\n]+", cls) if c.strip()]
+                        has_loc = bool(x or z)
+                        tmpl = {"ConfigVersion": 28, "ID": nid, "ObjectiveType": 2, "ObjectiveText": text,
+                                "TimeLimit": -1, "Active": 1, "Position": [x, 0.0, z],
+                                "MaxDistance": (rad if has_loc else -1.0), "MinDistance": -1.0, "Amount": amount,
+                                "ClassNames": cls, "CountSelfKill": 0, "AllowedWeapons": [], "ExcludedClassNames": [],
+                                "CountAIPlayers": 0, "AllowedTargetFactions": [], "AllowedDamageZones": []}
+                        folder, abbr = "Target", "TA"
+                    elif t == 3:  # Travel / go to
+                        tmpl = {"ConfigVersion": 28, "ID": nid, "ObjectiveType": 3, "ObjectiveText": text,
+                                "TimeLimit": -1, "Active": 1, "Position": [x, 0.0, z], "MaxDistance": (rad or 50.0),
+                                "MarkerName": marker, "ShowDistance": 1, "TriggerOnEnter": 1, "TriggerOnExit": 0}
+                        folder, abbr = "Travel", "T"
+                    elif t == 4:  # Collection / collect
+                        tmpl = {"ConfigVersion": 28, "ID": nid, "ObjectiveType": 4, "ObjectiveText": text,
+                                "TimeLimit": -1, "Active": 1,
+                                "Collections": [{"Amount": amount, "ClassName": (ob.get("item") or ""),
+                                                 "QuantityPercent": -1, "MinQuantityPercent": -1}],
+                                "ShowDistance": 0, "AddItemsToNearbyMarketZone": 0, "NeedAnyCollection": 0}
+                        folder, abbr = "Collection", "C"
+                    elif t == 5:  # Delivery / deliver to the giver
+                        tmpl = {"ConfigVersion": 28, "ID": nid, "ObjectiveType": 5, "ObjectiveText": text,
+                                "TimeLimit": -1, "Active": 1,
+                                "Collections": [{"Amount": amount, "ClassName": (ob.get("item") or ""),
+                                                 "QuantityPercent": -1, "MinQuantityPercent": -1}],
+                                "ShowDistance": 1, "AddItemsToNearbyMarketZone": 0, "MaxDistance": 20.0,
+                                "MarkerName": marker}
+                        folder, abbr = "Delivery", "D"
+                    else:
+                        return self._json(400, {"error": f"the wizard doesn't support objective type {t} yet"})
+                    fp = write_new(os.path.join(objs_root, folder), f"Objective_{abbr}_{nid}.json", tmpl)
+                    out["objectives"].append({"ID": nid, "ObjectiveType": t, "file": fwd(fp)})
+                return self._json(200, out)
+            except Exception as e:
+                return self._json(500, {"error": str(e)})
+
         if route == "/api/turrets":
             tdir = os.path.join(EDIT_ROOT, "profiles", "AutomatedTurrets")
             fp = os.path.join(tdir, "AutomatedTurretsConfig.json")
