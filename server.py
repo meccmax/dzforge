@@ -641,6 +641,25 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json(500, {"error": str(e)})
 
+        if route == "/api/aimissions":
+            adir = os.path.join(EDIT_ROOT, "profiles", "AIMissions")
+            fp = os.path.join(adir, "MainConfig.json")
+            out = {"file": fwd(fp), "dir": fwd(adir), "exists": os.path.isfile(fp), "missions": []}
+            if os.path.isfile(fp):
+                try:
+                    with open(fp, "r", encoding="utf-8-sig") as f:
+                        d = json.load(f)
+                    for i, mzn in enumerate(d.get("Missions") or []):
+                        pos = mzn.get("Position") or [0, 0, 0]
+                        out["missions"].append({
+                            "idx": i, "name": mzn.get("Name", "?"),
+                            "x": pos[0] if len(pos) > 0 else 0, "z": pos[2] if len(pos) > 2 else 0,
+                            "botMin": mzn.get("Bots_Count_Minimum"), "botMax": mzn.get("Bots_Count_Maximum"),
+                            "loadout": mzn.get("Bots_Expansion_Loadout", ""), "range": mzn.get("Bots_Range")})
+                except Exception as e:
+                    out["error"] = str(e)
+            return self._json(200, out)
+
         if route == "/api/market":
             mdir = os.path.join(EDIT_ROOT, "profiles", "ExpansionMod", "Market")
             files = []

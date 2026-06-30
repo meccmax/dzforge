@@ -666,11 +666,79 @@
         editbar.appendChild(cs); editbar.appendChild(ks); editbar.appendChild(b);
       }).catch(() => {});
 
+      // AI Missions (AIMissions mod): placeable AI camps with bot count / loadout / range
+      let aiFile = null, aiData = null;
+      const gAI = L.layerGroup();
+      const aiIcon = () => L.divIcon({ className: 'dz-dot', html: `<div style="width:14px;height:14px;background:#f59e0b;border:2px solid #0c0f13;box-shadow:0 0 0 1px #f59e0b80;transform:rotate(45deg);"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] });
+      async function aiUpdate(idx, fn) {
+        const raw = await apiRead(aiFile), obj = JSON.parse(raw);
+        const im = raw.match(/\n([ \t]+)\S/), ind = im ? (im[1].includes('\t') ? '\t' : im[1].length) : 2;
+        if (!obj.Missions || !obj.Missions[idx]) throw new Error('mission not found');
+        fn(obj.Missions[idx]);
+        return apiSave(aiFile, JSON.stringify(obj, null, ind));
+      }
+      function renderAi() {
+        gAI.clearLayers();
+        for (let i = editEntities.length - 1; i >= 0; i--) if (editEntities[i].ai) editEntities.splice(i, 1);
+        aiData.missions.forEach(aiMarker);
+      }
+      function aiMarker(p) {
+        const m = L.marker(ll(p.x, p.z), { icon: aiIcon(), draggable: editMode });
+        m.bindTooltip(`🤖 ${p.name} (${p.botMin}–${p.botMax} AI)`, { direction: 'top' });
+        m.bindPopup(() => {
+          const d = document.createElement('div'); d.className = 'eform';
+          d.innerHTML = `<b>🤖 AI mission</b>`;
+          const fld = (label, val, num) => { const r = document.createElement('label'); r.textContent = label; const i = document.createElement('input'); if (num) i.type = 'number'; i.value = val == null ? '' : val; r.appendChild(i); d.appendChild(r); return i; };
+          const nm = fld('Name', p.name), bmin = fld('Bots min', p.botMin, 1), bmax = fld('Bots max', p.botMax, 1), lo = fld('Loadout', p.loadout), rng = fld('Range (m)', p.range, 1);
+          const save = document.createElement('button'); save.className = 'minibtn'; save.textContent = '💾 Save';
+          save.onclick = async () => { try { await aiUpdate(p.idx, mz => { mz.Name = nm.value; mz.Bots_Count_Minimum = +bmin.value || 0; mz.Bots_Count_Maximum = +bmax.value || 0; mz.Bots_Expansion_Loadout = lo.value; mz.Bots_Range = +rng.value || 0; }); Object.assign(p, { name: nm.value, botMin: +bmin.value, botMax: +bmax.value, loadout: lo.value, range: +rng.value }); m.setTooltipContent(`🤖 ${p.name} (${p.botMin}–${p.botMax} AI)`); toast('✔ Saved AI mission', 'ok'); } catch (e) { toast('✖ Save failed: ' + e, 'err'); } };
+          const del = document.createElement('button'); del.className = 'minibtn'; del.textContent = '🗑 Delete'; del.style.marginLeft = '6px';
+          del.onclick = async () => { if (!confirm('Delete AI mission "' + p.name + '"?')) return; try { const raw = await apiRead(aiFile), obj = JSON.parse(raw), im = raw.match(/\n([ \t]+)\S/), ind = im ? (im[1].includes('\t') ? '\t' : im[1].length) : 2; obj.Missions.splice(p.idx, 1); const r = await apiSave(aiFile, JSON.stringify(obj, null, ind)); m.closePopup(); aiData.missions.splice(p.idx, 1); aiData.missions.forEach((mm, i) => mm.idx = i); renderAi(); toast(`🗑 Deleted "${p.name}" — backup: ${baseName(r.backup)}`, 'ok'); } catch (e) { toast('✖ Delete failed: ' + e, 'err'); } };
+          d.appendChild(save); d.appendChild(del);
+          const s = document.createElement('div'); s.innerHTML = src(aiFile, 1); d.appendChild(s);
+          return d;
+        });
+        m.on('add', () => m.dragging && (editMode ? m.dragging.enable() : m.dragging.disable()));
+        m.on('dragend', async () => {
+          const w = latLngToWorld(m.getLatLng());
+          try { const r = await aiUpdate(p.idx, mz => { mz.Position = [round2(w.X), (mz.Position && mz.Position[1]) || 0, round2(w.Z)]; }); p.x = round2(w.X); p.z = round2(w.Z); toast(`✔ Moved "${p.name}" — backup: ${baseName(r.backup)}`, 'ok'); }
+          catch (e) { toast('✖ Move failed: ' + e, 'err'); }
+        });
+        editEntities.push({ marker: m, ai: true }); m.addTo(gAI); return m;
+      }
+      async function placeAi(X, Z) {
+        if (!aiFile) { toast('AIMissions mod not found on this server.', 'err'); return; }
+        const name = prompt('AI mission name:', 'New AI Mission'); if (name === null) return;
+        const raw = await apiRead(aiFile), obj = JSON.parse(raw);
+        const im = raw.match(/\n([ \t]+)\S/), ind = im ? (im[1].includes('\t') ? '\t' : im[1].length) : 2;
+        obj.Missions = obj.Missions || [];
+        const tmpl = obj.Missions.length ? JSON.parse(JSON.stringify(obj.Missions[0]))
+          : { Name: '', Position: [0, 0, 0], Bots_Count_Minimum: 5, Bots_Count_Maximum: 10, Bots_Expansion_Loadout: '', Bots_Loadout_ID: 1, Bots_Range: 700, Bots_Accuracy: 0.4, Bots_Damage_Done_Multiplier: 1.0, Bots_Damage_Taken_Multiplier: 1.0, Bots_Drop_Loot: 1, Bots_Drop_Weapon: 1, Is_NBC_Mission: 0, Allow_Crate_Reward: 0, Allow_Vehicle_Reward: 1, Allow_Helicopter_Reward: 0, Static_Objects: [] };
+        tmpl.Name = name || 'New AI Mission'; tmpl.Position = [round2(X), 0, round2(Z)];
+        const idx = obj.Missions.length; obj.Missions.push(tmpl);
+        const r = await apiSave(aiFile, JSON.stringify(obj, null, ind));
+        const p = { idx, name: tmpl.Name, x: round2(X), z: round2(Z), botMin: tmpl.Bots_Count_Minimum, botMax: tmpl.Bots_Count_Maximum, loadout: tmpl.Bots_Expansion_Loadout, range: tmpl.Bots_Range };
+        aiData.missions.push(p);
+        if (!map.hasLayer(gAI)) map.addLayer(gAI);
+        aiMarker(p).openPopup();
+        toast(`✔ Placed AI mission "${p.name}" (cloned defaults — edit in the popup) — backup: ${baseName(r.backup)}`, 'ok');
+      }
+      fetch('/api/aimissions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json()).then(j => {
+        if (!j.exists) return;
+        aiFile = j.file; aiData = j;
+        renderAi();
+        layerCtl.addOverlay(gAI, `🤖 AI missions (${j.missions.length})`);
+        const b = document.createElement('button'); b.className = 'placebtn'; b.textContent = '🤖 Place AI mission'; b.title = 'Place an AI mission/camp: click here, then click the map. Bot count, loadout and range are cloned from your first mission and editable in the popup.';
+        b.onclick = () => { if (!editMode) { document.getElementById('editToggle').checked = true; setEditMode(true); } placing = { ai: true }; document.getElementById('map').style.cursor = 'crosshair'; toast('Click the map to place an AI mission.'); };
+        editbar.appendChild(b);
+      }).catch(() => {});
+
       map.on('click', async (e) => {
         if (!placing) return;
         const w = latLngToWorld(e.latlng); const p = placing;
         placing = null; document.getElementById('map').style.cursor = '';
         if (p.dna) { await placeDna(p.color, p.kind, w.X, w.Z); return; }
+        if (p.ai) { await placeAi(w.X, w.Z); return; }
         try {
           const r = await fetch('/api/new_entity', { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ kind: p.kind, type: p.type, x: round2(w.X), z: round2(w.Z) }) });

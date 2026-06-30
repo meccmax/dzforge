@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **Map AI-mission generator** — click the map to drop an AI mission/camp (AIMissions
+  mod): set the name, bot count, loadout and range in a popup, drag to reposition,
+  and delete — all written to `MainConfig.json` with backups. New missions clone your
+  first mission's settings as sensible defaults.
 - **Expansion Market catalog editor** — browse and edit the `ExpansionMod/Market`
   price catalogs (item buy min/max and sell %), with a **bulk-import** that pulls
   items from your economy by category and fills in auto-suggested prices (a built-in
