@@ -478,6 +478,33 @@
     }
     window.addEventListener('hashchange', applyHashView);
 
+    // ---- shareable config bundles (export/import) ----
+    function bundleDownload(bundle) {
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob), a = el('a');
+      a.href = url; a.download = `${bundle.kind || 'config'}_${(bundle.name || 'export').replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40)}.dzforge.json`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+    async function exportBundle(kind, path, dirtyId) {
+      if (dirtyId) { const b = document.getElementById(dirtyId); if (b && !b.disabled) { toast('Save first, then export.', 'err'); return; } }
+      try { const j = await api('/api/export_bundle', { kind, path }); bundleDownload(j.bundle); const n = j.bundle.files.length; toast(`📤 Exported “${j.bundle.name}” (${n} file${n !== 1 ? 's' : ''}) — check your Downloads.`, 'ok'); }
+      catch (x) { toast('✖ Export failed: ' + x, 'err'); }
+    }
+    function importBundlePick(onDone) {
+      const inp = el('input'); inp.type = 'file'; inp.accept = '.json,application/json';
+      inp.onchange = () => {
+        const f = inp.files[0]; if (!f) return; const rd = new FileReader();
+        rd.onload = async () => {
+          let bundle; try { bundle = JSON.parse(rd.result); } catch (e) { toast('That file isn\'t valid JSON.', 'err'); return; }
+          if (bundle.dzforge_bundle !== 1) { toast('That isn\'t a DZ Forge bundle file.', 'err'); return; }
+          try { const r = await api('/api/import_bundle', { bundle }); onDone(r, bundle); }
+          catch (x) { toast('✖ Import failed: ' + x, 'err'); }
+        };
+        rd.readAsText(f);
+      };
+      inp.click();
+    }
+
     // ---- Expansion Loadout editor ----
     let curLoadout = null, CLASSNAMES = null;
     const LO_SLOTS = ['Head','Headgear','Mask','Eyewear','Hands','Gloves','Armband','Body','Vest','Back','Hips','Legs','Feet','Shoulder','Melee'];
@@ -500,9 +527,11 @@
         window.__loDir = j.dir;
         window.__loadoutNames = j.files.map(f => f.name.replace('.json', ''));
         list.innerHTML = `<input id="lo-search" class="lo-search" placeholder="🔍 filter loadouts…" autocomplete="off" title="Type to filter this list by loadout name.">` +
-          `<button class="act" id="lo-new" style="margin-bottom:8px;width:100%;" title="Create a brand-new, empty loadout. It saves into your ExpansionMod/Loadouts folder.">+ New loadout</button>` +
+          `<button class="act" id="lo-new" style="margin-bottom:6px;width:100%;" title="Create a brand-new, empty loadout. It saves into your ExpansionMod/Loadouts folder.">+ New loadout</button>` +
+          `<button class="ghost" id="lo-import" style="margin-bottom:8px;width:100%;" title="Import a shared loadout bundle into your ExpansionMod/Loadouts folder.">📥 Import loadout bundle</button>` +
           j.files.map(f => `<div class="trow lo-file" data-p="${f.path}"><span class="ic">🎖️</span><span class="nm ed">${esc(f.name.replace('.json', ''))}</span></div>`).join('');
         document.getElementById('lo-new').onclick = loNew;
+        document.getElementById('lo-import').onclick = () => importBundlePick(async (r) => { toast(`📥 Imported loadout — ${baseName(r.file)}`, 'ok'); await loadLoadouts(); openLoadout(r.file); });
         const sbx = document.getElementById('lo-search');
         sbx.oninput = () => { const q = sbx.value.toLowerCase(); list.querySelectorAll('.lo-file').forEach(r => { r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none'; }); };
         list.querySelectorAll('.lo-file').forEach(r => r.onclick = () => { list.querySelectorAll('.lo-file').forEach(x => x.classList.remove('sel')); r.classList.add('sel'); openLoadout(r.dataset.p); });
@@ -530,9 +559,10 @@
     const loTag = label => { const s = el('span', 'lo-tag', label); if (LO_TIP[label]) s.title = LO_TIP[label]; return s; };
     function renderLoadout() {
       const ed = $('#lo-editor');
-      ed.innerHTML = `<div class="lo-head"><b>🎖️ ${esc(baseName(curLoadout.path))}</b><button class="act" id="lo-save" disabled title="Save this loadout. The previous version is backed up automatically.">💾 Save</button><button class="ghost" id="lo-verify" title="Check this loadout for typos (unknown items) and bad values (chance, quantity, condition).">✓ Verify</button><button class="ghost" id="lo-dup" title="Save a copy of this loadout under a new name.">⧉ Duplicate</button><span id="lo-clip">${loClip ? '📋 ' + esc(loClip.ClassName || 'item') + ' copied' : ''}</span></div><div id="lo-report"></div><div id="lo-doll"></div><div id="lo-doll-extra"></div><div class="lo-filterbar">🔎 <input id="lo-filter" placeholder="find item in this loadout…" autocomplete="off" title="Find items in THIS loadout by class name. Matches are outlined and their sections opened up."><span id="lo-fcount"></span></div><div id="lo-root"></div>`;
+      ed.innerHTML = `<div class="lo-head"><b>🎖️ ${esc(baseName(curLoadout.path))}</b><button class="act" id="lo-save" disabled title="Save this loadout. The previous version is backed up automatically.">💾 Save</button><button class="ghost" id="lo-verify" title="Check this loadout for typos (unknown items) and bad values (chance, quantity, condition).">✓ Verify</button><button class="ghost" id="lo-dup" title="Save a copy of this loadout under a new name.">⧉ Duplicate</button><button class="ghost" id="lo-export" title="Export this loadout as a shareable bundle file.">📤 Export</button><span id="lo-clip">${loClip ? '📋 ' + esc(loClip.ClassName || 'item') + ' copied' : ''}</span></div><div id="lo-report"></div><div id="lo-doll"></div><div id="lo-doll-extra"></div><div class="lo-filterbar">🔎 <input id="lo-filter" placeholder="find item in this loadout…" autocomplete="off" title="Find items in THIS loadout by class name. Matches are outlined and their sections opened up."><span id="lo-fcount"></span></div><div id="lo-root"></div>`;
       document.getElementById('lo-save').onclick = saveLoadout;
       document.getElementById('lo-verify').onclick = verifyLoadout;
+      document.getElementById('lo-export').onclick = () => exportBundle('loadout', curLoadout.path, 'lo-save');
       document.getElementById('lo-dup').onclick = loDuplicate;
       document.getElementById('lo-filter').oninput = e => loFilterItems(e.target.value);
       renderDoll();
@@ -751,7 +781,7 @@
         `<button class="q-tab${qTab === 'npcs' ? ' on' : ''}" data-t="npcs" title="Quest-giver NPCs.">🧍 NPCs</button></div>`;
       let rows = '', topBtn = '';
       if (qTab === 'quests') {
-        topBtn = `<button class="act" id="q-wizard" style="margin-bottom:6px;width:100%;" title="Guided quest creation — answer a few questions and DZ Forge writes the quest, its objective and (if needed) the NPC for you.">🪄 New quest (wizard)</button><button class="ghost" id="q-new" style="margin-bottom:6px;width:100%;" title="Create a brand-new, empty quest (auto-assigns the next free ID).">+ Blank quest</button><button class="ghost" id="q-audit" style="margin-bottom:8px;width:100%;" title="Scan ALL quests, objectives and NPCs at once for duplicate IDs, broken references, unused objectives and bad reward items.">🔍 Audit all</button>`;
+        topBtn = `<button class="act" id="q-wizard" style="margin-bottom:6px;width:100%;" title="Guided quest creation — answer a few questions and DZ Forge writes the quest, its objective and (if needed) the NPC for you.">🪄 New quest (wizard)</button><button class="ghost" id="q-new" style="margin-bottom:6px;width:100%;" title="Create a brand-new, empty quest (auto-assigns the next free ID).">+ Blank quest</button><button class="ghost" id="q-audit" style="margin-bottom:6px;width:100%;" title="Scan ALL quests, objectives and NPCs at once for duplicate IDs, broken references, unused objectives and bad reward items.">🔍 Audit all</button><button class="ghost" id="q-import" style="margin-bottom:8px;width:100%;" title="Import a shared quest bundle — its objectives and NPCs are recreated with fresh IDs so nothing collides.">📥 Import quest bundle</button>`;
         rows = questData.quests.map(q => {
           const sum = questSummary({ QuestGiverIDs: q.givers, QuestTurnInIDs: q.turnIns, Objectives: q.objectives, Rewards: (q.rewards || []).map(c => ({ ClassName: c, Amount: 1 })) });
           return `<div class="trow q-file${+q.active ? '' : ' off'}" data-kind="quest" data-p="${q.file}" title="${esc(sum)}"><span class="ic">📜</span><span class="qid">#${q.id == null ? '?' : q.id}</span><span class="nm">${esc(q.title || q.name)}</span></div>`;
@@ -770,6 +800,10 @@
       const nb = document.getElementById('q-new'); if (nb) nb.onclick = questNew;
       const wb = document.getElementById('q-wizard'); if (wb) wb.onclick = openQuestWizard;
       const ab = document.getElementById('q-audit'); if (ab) ab.onclick = auditQuests;
+      const ib = document.getElementById('q-import'); if (ib) ib.onclick = () => importBundlePick(async (r) => {
+        toast(`📥 Imported quest #${r.questId} (+${r.objectives.length} objective${r.objectives.length !== 1 ? 's' : ''}, ${r.npcs.length} NPC${r.npcs.length !== 1 ? 's' : ''})`, 'ok');
+        await loadQuests(); qTab = 'quests'; renderQuestList(); openQuest(r.file);
+      });
       const sb = document.getElementById('q-search');
       sb.oninput = () => { const q = sb.value.toLowerCase(); list.querySelectorAll('.q-file').forEach(r => r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none'); };
       list.querySelectorAll('.q-file').forEach(r => r.onclick = () => {
@@ -883,10 +917,11 @@
       const ed = $('#q-editor'), m = curQuest.model;
       m.Descriptions = m.Descriptions || []; m.Rewards = m.Rewards || []; m.Objectives = m.Objectives || [];
       m.QuestGiverIDs = m.QuestGiverIDs || []; m.QuestTurnInIDs = m.QuestTurnInIDs || []; m.PreQuestIDs = m.PreQuestIDs || [];
-      ed.innerHTML = `<div class="lo-head"><b>📜 ${esc(m.Title || baseName(curQuest.path))} <span style="color:var(--mut);font-weight:400;">#${m.ID == null ? '?' : m.ID}</span></b><button class="act" id="q-save" disabled title="Save this quest. The previous version is backed up automatically.">💾 Save</button><button class="ghost" id="q-verify" title="Check for broken NPC / quest / objective references and bad reward items.">✓ Verify</button><button class="ghost" id="q-dup" title="Save a copy of this quest under a new name and a fresh ID.">⧉ Duplicate</button></div><div class="q-summary" id="q-summary" title="A plain-language summary of what this quest does, built from its NPCs, objectives and rewards."></div><div id="q-report"></div><div id="q-body"></div>`;
+      ed.innerHTML = `<div class="lo-head"><b>📜 ${esc(m.Title || baseName(curQuest.path))} <span style="color:var(--mut);font-weight:400;">#${m.ID == null ? '?' : m.ID}</span></b><button class="act" id="q-save" disabled title="Save this quest. The previous version is backed up automatically.">💾 Save</button><button class="ghost" id="q-verify" title="Check for broken NPC / quest / objective references and bad reward items.">✓ Verify</button><button class="ghost" id="q-dup" title="Save a copy of this quest under a new name and a fresh ID.">⧉ Duplicate</button><button class="ghost" id="q-export" title="Export this quest and its objectives + NPCs as one shareable bundle file.">📤 Export</button></div><div class="q-summary" id="q-summary" title="A plain-language summary of what this quest does, built from its NPCs, objectives and rewards."></div><div id="q-report"></div><div id="q-body"></div>`;
       document.getElementById('q-save').onclick = saveQuest;
       document.getElementById('q-verify').onclick = verifyQuest;
       document.getElementById('q-dup').onclick = questDuplicate;
+      document.getElementById('q-export').onclick = () => exportBundle('quest', curQuest.path, 'q-save');
       document.getElementById('q-summary').textContent = '📖 ' + questSummary(m);
       const body = $('#q-body');
       const mkCard = (title, build) => { const c = el('div', 'lo-card'); loSection(c, title, 0, build); body.appendChild(c); };

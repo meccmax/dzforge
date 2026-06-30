@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **Shareable config bundles** — export a quest (with its objectives and NPCs) or a
+  loadout as a single portable `.dzforge.json` file, and import one back. Imported
+  quests have their objective / NPC / quest IDs remapped automatically (per objective
+  type) so nothing collides on the target server.
 - **Map AI-mission generator** — click the map to drop an AI mission/camp (AIMissions
   mod): set the name, bot count, loadout and range in a popup, drag to reposition,
   and delete — all written to `MainConfig.json` with backups. New missions clone your

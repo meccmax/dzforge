@@ -641,6 +641,126 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json(500, {"error": str(e)})
 
+        if route == "/api/export_bundle":
+            kind = body.get("kind")
+            path = in_edit_root(body.get("path", ""))
+            if not path or not os.path.isfile(path):
+                return self._json(400, {"error": "file not found"})
+
+            def _loadj(p):
+                with open(p, "r", encoding="utf-8-sig") as f:
+                    return json.load(f)
+
+            try:
+                stamp = __import__("time").strftime("%Y-%m-%d")
+                if kind == "quest":
+                    qbase = os.path.join(EDIT_ROOT, "profiles", "ExpansionMod", "Quests")
+                    odir = os.path.join(qbase, "Objectives")
+                    ndir = os.path.join(qbase, "NPCs")
+                    quest = _loadj(path)
+                    files = [{"role": "quest", "name": os.path.basename(path), "content": quest}]
+                    # objective IDs are per-type on this mod (Action #1 and Collection #1 can coexist),
+                    # so match + dedupe by (ObjectiveType, ID) — never by ID alone
+                    want_obj = {(o.get("ObjectiveType"), o.get("ID")) for o in quest.get("Objectives", []) if isinstance(o, dict)}
+                    seen_obj = set()
+                    if os.path.isdir(odir):
+                        for sub in os.listdir(odir):
+                            sp = os.path.join(odir, sub)
+                            if not os.path.isdir(sp):
+                                continue
+                            for fn in os.listdir(sp):
+                                if not fn.lower().endswith(".json"):
+                                    continue
+                                try:
+                                    d = _loadj(os.path.join(sp, fn))
+                                except Exception:
+                                    continue
+                                key = (d.get("ObjectiveType"), d.get("ID"))
+                                if key in want_obj and key not in seen_obj:
+                                    seen_obj.add(key)
+                                    files.append({"role": "objective", "name": fn, "content": d})
+                    want_npc = set(quest.get("QuestGiverIDs", []) or []) | set(quest.get("QuestTurnInIDs", []) or [])
+                    seen_npc = set()
+                    if want_npc and os.path.isdir(ndir):
+                        for fn in os.listdir(ndir):
+                            if not fn.lower().endswith(".json"):
+                                continue
+                            try:
+                                d = _loadj(os.path.join(ndir, fn))
+                            except Exception:
+                                continue
+                            nid = d.get("ID")
+                            if nid in want_npc and nid not in seen_npc:
+                                seen_npc.add(nid)
+                                files.append({"role": "npc", "name": fn, "content": d})
+                    return self._json(200, {"bundle": {"dzforge_bundle": 1, "kind": "quest",
+                        "name": quest.get("Title") or os.path.basename(path), "exported": stamp, "files": files}})
+                d = _loadj(path)
+                nm = d.get("DisplayName") or d.get("m_DisplayName") or os.path.basename(path)[:-5]
+                return self._json(200, {"bundle": {"dzforge_bundle": 1, "kind": kind or "file",
+                    "name": nm, "exported": stamp, "files": [{"role": kind or "file", "name": os.path.basename(path), "content": d}]}})
+            except Exception as e:
+                return self._json(500, {"error": str(e)})
+
+        if route == "/api/import_bundle":
+            b = body.get("bundle") or {}
+            if b.get("dzforge_bundle") != 1:
+                return self._json(400, {"error": "not a DZ Forge bundle"})
+            kind = b.get("kind")
+            files = b.get("files") or []
+            try:
+                if kind == "quest":
+                    qbase = os.path.join(EDIT_ROOT, "profiles", "ExpansionMod", "Quests")
+                    qdir = os.path.join(qbase, "Quests")
+                    odir = os.path.join(qbase, "Objectives")
+                    ndir = os.path.join(qbase, "NPCs")
+                    if not os.path.isdir(qbase):
+                        return self._json(400, {"error": "No Expansion Quests folder on this server."})
+                    OBJ_FOLDER = {2: "Target", 3: "Travel", 4: "Collection", 5: "Delivery", 6: "TreasureHunt",
+                                  7: "AIPatrol", 8: "AICamp", 9: "AIVIP", 10: "Action", 11: "Crafting"}
+                    quest = next((f["content"] for f in files if f.get("role") == "quest"), None)
+                    if not quest:
+                        return self._json(400, {"error": "bundle has no quest"})
+                    created = []
+                    all_odirs = [os.path.join(odir, d) for d in os.listdir(odir)] if os.path.isdir(odir) else []
+                    next_oid = max_id_in(all_odirs)
+                    omap = {}
+                    for f in [x for x in files if x.get("role") == "objective"]:
+                        c = dict(f["content"]); next_oid += 1
+                        omap[(c.get("ObjectiveType"), c.get("ID"))] = next_oid; c["ID"] = next_oid
+                        folder = OBJ_FOLDER.get(c.get("ObjectiveType"), "Target")
+                        created.append(fwd(write_new(os.path.join(odir, folder), f"Objective_{folder}_{next_oid}.json", c)))
+                    next_nid = max_id_in([ndir])
+                    nmap = {}
+                    for f in [x for x in files if x.get("role") == "npc"]:
+                        c = dict(f["content"]); old = c.get("ID"); next_nid += 1; c["ID"] = next_nid; nmap[old] = next_nid
+                        created.append(fwd(write_new(ndir, f"QuestNPC_{next_nid}.json", c)))
+                    q = dict(quest)
+                    q["ID"] = max_id_in([qdir]) + 1
+                    q["Objectives"] = [{"ConfigVersion": o.get("ConfigVersion", 28),
+                                        "ID": omap.get((o.get("ObjectiveType"), o.get("ID")), o.get("ID")),
+                                        "ObjectiveType": o.get("ObjectiveType")} for o in q.get("Objectives", []) if isinstance(o, dict)]
+                    q["QuestGiverIDs"] = [nmap.get(i, i) for i in (q.get("QuestGiverIDs") or [])]
+                    q["QuestTurnInIDs"] = [nmap.get(i, i) for i in (q.get("QuestTurnInIDs") or [])]
+                    q["PreQuestIDs"] = []      # referenced quests aren't in the bundle
+                    q["FollowUpQuest"] = -1
+                    slug = re.sub(r"[^A-Za-z0-9_]+", "_", (q.get("Title") or "ImportedQuest")).strip("_")[:40] or ("Quest_%d" % q["ID"])
+                    fp = write_new(qdir, f"{slug}.json", q)
+                    return self._json(200, {"kind": "quest", "questId": q["ID"], "file": fwd(fp),
+                        "objectives": list(omap.values()), "npcs": list(nmap.values()), "created": created + [fwd(fp)]})
+                dest = {"loadout": os.path.join(EDIT_ROOT, "profiles", "ExpansionMod", "Loadouts"),
+                        "market": os.path.join(EDIT_ROOT, "profiles", "ExpansionMod", "Market"),
+                        "trader": os.path.join(MISSION_DIR, "expansion", "traderzones")}.get(kind)
+                if not dest:
+                    return self._json(400, {"error": f"can't import kind '{kind}'"})
+                f = files[0] if files else None
+                if not f:
+                    return self._json(400, {"error": "empty bundle"})
+                fp = write_new(dest, f.get("name") or ((b.get("name") or "import") + ".json"), f["content"])
+                return self._json(200, {"kind": kind, "file": fwd(fp), "created": [fwd(fp)]})
+            except Exception as e:
+                return self._json(500, {"error": str(e)})
+
         if route == "/api/aimissions":
             adir = os.path.join(EDIT_ROOT, "profiles", "AIMissions")
             fp = os.path.join(adir, "MainConfig.json")
