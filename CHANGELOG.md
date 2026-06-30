@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **Plain-language Expansion settings** — friendly labels and hover tips for the
+  most-tuned options across Vehicle, Quest, Notification, General, Chat, Map and
+  Safe-zone settings (matching what Expansion's own docs describe); unknown keys
+  fall back to readable auto-formatted labels.
 - **Shareable config bundles** — export a quest (with its objectives and NPCs) or a
   loadout as a single portable `.dzforge.json` file, and import one back. Imported
   quests have their objective / NPC / quest IDs remapped automatically (per objective
