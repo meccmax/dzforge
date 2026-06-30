@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **Expansion Market catalog editor** — browse and edit the `ExpansionMod/Market`
+  price catalogs (item buy min/max and sell %), with a **bulk-import** that pulls
+  items from your economy by category and fills in auto-suggested prices (a built-in
+  Types→Market converter), plus an "auto-price blanks" helper.
 - **Quest Wizard** — guided quest creation: answer a few plain-English questions
   (title, who gives it, what to do, reward) and DZ Forge writes the quest, its
   objective and — if needed — the NPC, all linked together, with a live preview.

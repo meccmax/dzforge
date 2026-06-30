@@ -641,6 +641,25 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json(500, {"error": str(e)})
 
+        if route == "/api/market":
+            mdir = os.path.join(EDIT_ROOT, "profiles", "ExpansionMod", "Market")
+            files = []
+            if os.path.isdir(mdir):
+                for fn in sorted(os.listdir(mdir)):
+                    if not fn.lower().endswith(".json"):
+                        continue
+                    p = os.path.join(mdir, fn)
+                    disp, cnt = fn[:-5], 0
+                    try:
+                        with open(p, "r", encoding="utf-8-sig") as f:
+                            d = json.load(f)
+                        disp = d.get("DisplayName") or disp
+                        cnt = len(d.get("Items") or [])
+                    except Exception:
+                        pass
+                    files.append({"name": fn, "path": fwd(p), "display": disp, "count": cnt})
+            return self._json(200, {"dir": fwd(mdir), "exists": os.path.isdir(mdir), "files": files})
+
         if route == "/api/turrets":
             tdir = os.path.join(EDIT_ROOT, "profiles", "AutomatedTurrets")
             fp = os.path.join(tdir, "AutomatedTurretsConfig.json")

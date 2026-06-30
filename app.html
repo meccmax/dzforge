@@ -234,6 +234,12 @@
     .qw-sec { margin:12px 0; }
     .qw-sec > h4 { margin:0 0 6px; font-size:13px; color:var(--acc); border-bottom:1px solid var(--line); padding-bottom:3px; }
     .qw-prev { background:#16202c; border:1px solid var(--line); border-radius:6px; padding:8px 10px; font-size:12px; color:#cdd6e0; min-height:18px; line-height:1.5; }
+    #mkb-ov { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:70; display:none; align-items:center; justify-content:center; }
+    #mkb-ov.show { display:flex; }
+    #mkb-box { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; width:560px; max-width:94vw; max-height:88vh; overflow:auto; }
+    .mkb-row { display:flex; gap:6px; align-items:center; font-size:12px; margin:2px 0; cursor:pointer; }
+    .mkb-row > span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mkt-file { cursor:pointer; }
     .ecat { cursor:pointer; text-decoration:underline dotted; }
     .jkey.cfgdoc { cursor:help; border-bottom:1px dotted var(--mut); }
     #setup-ov { position:fixed; inset:0; background:var(--bg); z-index:100; display:none; align-items:center; justify-content:center; }
@@ -380,13 +386,23 @@
 
       <div class="view" id="view-traders">
         <div style="padding:16px; overflow:auto; width:100%;">
-          <div style="display:flex; align-items:center; gap:12px; margin:0 0 10px;">
-            <h2 style="margin:0; font-weight:600;">Trader zones</h2>
-            <button class="ghost" id="trd-verify" title="Check every trader zone for problems: unplaced zones, zero radius, traders that can't buy or sell, empty stock, duplicate names.">✓ Verify</button>
+          <div class="q-tabs">
+            <button class="q-tab on" data-tt="zones" title="Trader zones: where traders are, what they stock, and buy/sell percentages.">🪙 Trader zones</button>
+            <button class="q-tab" data-tt="market" title="Expansion Market price catalogs — edit item prices and bulk-import items from your economy.">🏷️ Market &amp; prices</button>
           </div>
-          <div id="trd-report"></div>
-          <div id="trd-table"><div class="empty">Loading…</div></div>
-          <div id="trd-editor" style="display:none;"></div>
+          <div id="tt-zones">
+            <div style="display:flex; align-items:center; gap:12px; margin:8px 0 10px;">
+              <h2 style="margin:0; font-weight:600;">Trader zones</h2>
+              <button class="ghost" id="trd-verify" title="Check every trader zone for problems: unplaced zones, zero radius, traders that can't buy or sell, empty stock, duplicate names.">✓ Verify</button>
+            </div>
+            <div id="trd-report"></div>
+            <div id="trd-table"><div class="empty">Loading…</div></div>
+            <div id="trd-editor" style="display:none;"></div>
+          </div>
+          <div id="tt-market" style="display:none;">
+            <div id="mkt-list"><div class="empty">Loading…</div></div>
+            <div id="mkt-editor" style="display:none;"></div>
+          </div>
         </div>
       </div>
 
@@ -432,7 +448,7 @@
       if (b.dataset.view === 'turrets') { const f = $('#turretFrame'); if (!f.src) f.src = f.dataset.src; }
       if (b.dataset.view === 'conn') loadConn();
       if (b.dataset.view === 'economy') loadEconomy();
-      if (b.dataset.view === 'traders') loadTraders();
+      if (b.dataset.view === 'traders') { loadTraders(); setupTraderTabs(); }
       if (b.dataset.view === 'validate') loadValidate();
       if (b.dataset.view === 'servercfg') loadServerCfg();
       if (b.dataset.view === 'loadouts') loadLoadouts();
@@ -2110,6 +2126,142 @@
       r.innerHTML = `<div class="lo-rep"><div class="lo-rep-head"><b>${errs}</b> error${errs !== 1 ? 's' : ''}, <b>${warns}</b> warning${warns !== 1 ? 's' : ''} across ${zones.length} zones<button class="lo-x" id="trd-rep-x">✕</button></div>` +
         issues.map(i => `<div class="lo-iss ${i.sev}"><span>${i.sev === 'err' ? '⛔' : '⚠️'}</span> <span class="lo-iss-path">${esc(i.t)}</span> — ${esc(i.m)}</div>`).join('') + '</div>';
       document.getElementById('trd-rep-x').onclick = () => { r.innerHTML = ''; };
+    }
+    // ---- Trader sub-tabs + Expansion Market catalog editor ----
+    let marketLoaded = false;
+    function setupTraderTabs() {
+      document.querySelectorAll('#view-traders .q-tab[data-tt]').forEach(b => b.onclick = () => {
+        document.querySelectorAll('#view-traders .q-tab').forEach(x => x.classList.remove('on')); b.classList.add('on');
+        const tt = b.dataset.tt;
+        $('#tt-zones').style.display = tt === 'zones' ? '' : 'none';
+        $('#tt-market').style.display = tt === 'market' ? '' : 'none';
+        if (tt === 'market' && !marketLoaded) { marketLoaded = true; loadMarket(); }
+      });
+    }
+    let curMarket = null, marketFiles = [];
+    async function loadMarket() {
+      ensureClassnames();
+      const list = $('#mkt-list');
+      try {
+        const j = await api('/api/market', {});
+        if (!j.exists) { list.innerHTML = '<div class="note">No <code>profiles/ExpansionMod/Market</code> folder — is DayZ Expansion Market installed on this server?</div>'; return; }
+        marketFiles = j.files; renderMarketList();
+      } catch (x) { list.innerHTML = '<div class="note">' + x + '</div>'; }
+    }
+    function renderMarketList() {
+      const list = $('#mkt-list'); $('#mkt-editor').style.display = 'none'; list.style.display = '';
+      list.innerHTML = `<div class="lo-head" style="position:static;"><b>🏷️ Market catalogs</b><span class="emut">${marketFiles.length} categories</span></div>` +
+        `<input id="mkt-search" class="lo-search" placeholder="🔎 filter categories…" autocomplete="off"><div id="mkt-rows"></div>`;
+      const draw = () => {
+        const q = ($('#mkt-search').value || '').toLowerCase();
+        $('#mkt-rows').innerHTML = marketFiles.filter(f => !q || f.display.toLowerCase().includes(q) || f.name.toLowerCase().includes(q))
+          .map(f => `<div class="trow mkt-file" data-p="${f.path}"><span class="ic">🏷️</span><span class="nm">${esc(f.display)}</span><span class="emut" style="margin-left:auto;">${f.count} item${f.count !== 1 ? 's' : ''}</span></div>`).join('');
+        $('#mkt-rows').querySelectorAll('.mkt-file').forEach(r => r.onclick = () => openMarket(r.dataset.p));
+      };
+      $('#mkt-search').oninput = draw; draw();
+    }
+    async function openMarket(path) {
+      try {
+        const text = (await api('/api/read', { path })).content;
+        const m = text.match(/\n([ \t]+)\S/); const indent = m ? (m[1].includes('\t') ? '\t' : m[1].length) : 2;
+        curMarket = { path, model: JSON.parse(text), indent }; renderMarketEditor();
+      } catch (x) { toast('Could not open: ' + x, 'err'); }
+    }
+    function markMarket() { const b = document.getElementById('mkt-save'); if (b) { b.disabled = false; b.textContent = '💾 Save •'; } }
+    function renderMarketEditor() {
+      const m = curMarket.model; m.Items = m.Items || [];
+      const ed = $('#mkt-editor'); $('#mkt-list').style.display = 'none'; ed.style.display = 'block';
+      ed.innerHTML = `<div class="lo-head"><button class="ghost" id="mkt-back" title="Back to the catalog list">← Back</button><b>🏷️ ${esc(m.DisplayName || baseName(curMarket.path))}</b><button class="act" id="mkt-save" disabled title="Save this market catalog (previous version backed up).">💾 Save</button></div>` +
+        `<div class="note">Buy price floats between <b>min</b> and <b>max</b> based on stock. <b>Sell %</b> is what players get back when selling.</div>` +
+        `<div class="ev-child" style="margin:8px 0; gap:8px;"><button class="lo-add" id="mkt-bulk" title="Add many items at once from your economy, with prices filled in automatically.">➕ Bulk import from economy</button><button class="lo-add" id="mkt-autoprice" title="Fill in default prices for items that currently have none.">💲 Auto-price blanks</button></div>` +
+        `<div class="q-field"><label title="Filter the item list below.">Filter</label><input id="mkt-itemsearch" class="q-in" placeholder="🔎 filter items…" autocomplete="off"></div>` +
+        `<div class="ev-child" style="font-size:11px; color:var(--mut);"><span style="flex:1;">item class</span><span style="width:64px;">buy min</span><span style="width:64px;">buy max</span><span style="width:54px;">sell %</span><span style="width:24px;"></span></div>` +
+        `<div id="mkt-items"></div>`;
+      document.getElementById('mkt-back').onclick = renderMarketList;
+      document.getElementById('mkt-save').onclick = saveMarket;
+      document.getElementById('mkt-bulk').onclick = openMarketBulk;
+      document.getElementById('mkt-autoprice').onclick = () => {
+        let n = 0; m.Items.forEach(it => { if (!(+it.MaxPriceThreshold > 0)) { it.MaxPriceThreshold = 100; it.MinPriceThreshold = 60; if (it.SellPricePercent == null) it.SellPricePercent = 60; n++; } });
+        markMarket(); renderMarketItems(); toast(n ? `Filled prices for ${n} item(s).` : 'All items already priced.', n ? 'ok' : '');
+      };
+      document.getElementById('mkt-itemsearch').oninput = renderMarketItems;
+      renderMarketItems();
+    }
+    function renderMarketItems() {
+      const m = curMarket.model, host = $('#mkt-items'), q = ($('#mkt-itemsearch').value || '').toLowerCase();
+      const items = m.Items.map((it, i) => ({ it, i })).filter(o => !q || (o.it.ClassName || '').toLowerCase().includes(q));
+      const CAP = 400; host.innerHTML = '';
+      items.slice(0, CAP).forEach(({ it, i }) => {
+        const row = el('div', 'ev-child');
+        const cls = el('input', 'lo-clsin'); cls.setAttribute('list', 'cls-list'); cls.value = it.ClassName || ''; cls.style.flex = '1'; cls.placeholder = 'item class'; cls.oninput = () => { it.ClassName = cls.value; markMarket(); }; row.appendChild(cls);
+        const mkNum = (key, w) => { const n = el('input', 'lo-num'); n.type = 'number'; n.style.width = w; n.value = it[key] == null ? '' : it[key]; n.oninput = () => { it[key] = n.value === '' ? 0 : parseFloat(n.value); markMarket(); }; return n; };
+        row.appendChild(mkNum('MinPriceThreshold', '58px')); row.appendChild(mkNum('MaxPriceThreshold', '58px')); row.appendChild(mkNum('SellPricePercent', '48px'));
+        const x = el('button', 'lo-x', '✕'); x.title = 'remove item'; x.onclick = () => { m.Items.splice(i, 1); markMarket(); renderMarketItems(); }; row.appendChild(x);
+        host.appendChild(row);
+      });
+      if (items.length > CAP) host.appendChild(el('div', 'note', `Showing first ${CAP} — use the filter to narrow.`));
+      if (!m.Items.length) host.appendChild(el('div', 'note', 'No items yet — use “➕ Bulk import from economy”.'));
+    }
+    async function saveMarket() {
+      try {
+        const res = await api('/api/save', { path: curMarket.path, content: JSON.stringify(curMarket.model, null, curMarket.indent) });
+        const b = document.getElementById('mkt-save'); b.textContent = '💾 Save'; b.disabled = true;
+        const mf = marketFiles.find(f => f.path === curMarket.path); if (mf) mf.count = curMarket.model.Items.length;
+        toast(`✔ Saved ${baseName(curMarket.path)} — backup ${baseName(res.backup)}`, 'ok');
+      } catch (x) { toast('✖ Save failed: ' + x, 'err'); }
+    }
+    async function openMarketBulk() {
+      let ov = document.getElementById('mkb-ov');
+      if (!ov) { ov = el('div'); ov.id = 'mkb-ov'; document.body.appendChild(ov); }
+      if (!econRows) { try { const j = await api('/api/economy', {}); econRows = j.rows; } catch (e) {} }
+      const cats = econRows ? [...new Set(econRows.map(r => r.category).filter(Boolean))].sort() : [];
+      ov.innerHTML = `<div id="mkb-box">
+        <div class="lo-head" style="position:static;"><b>➕ Bulk import items</b><button class="ghost" id="mkb-x" style="margin-left:auto;">✕</button></div>
+        <div class="note">Add many items into <b>${esc(curMarket.model.DisplayName || baseName(curMarket.path))}</b> at once. Prices come from the auto-price settings below — tune them afterwards. Items already in the catalog are skipped.</div>
+        <div class="qw-sec"><h4>Pick items</h4>
+          <div class="q-field"><label>From economy category</label><select id="mkb-cat" class="q-in"><option value="">— choose a category —</option>${cats.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
+          <div class="q-field"><label>Filter</label><input id="mkb-filter" class="q-in" placeholder="🔎 narrow by name…"></div>
+          <div id="mkb-pick" style="max-height:210px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:6px; margin-top:2px;"><div class="note">Pick a category to list its items${econRows ? '' : ' (economy not loaded)'}.</div></div>
+          <div style="margin-top:6px;"><button class="lo-add" id="mkb-all">select all shown</button> <button class="lo-add" id="mkb-none">none</button> <span class="emut" id="mkb-count" style="margin-left:6px;"></span></div>
+          <details style="margin-top:8px;"><summary class="emut" style="cursor:pointer;">…or paste class names</summary><textarea id="mkb-paste" class="q-area" style="width:100%; min-height:60px; margin-top:4px;" placeholder="one class name per line"></textarea></details></div>
+        <div class="qw-sec"><h4>Auto-price</h4>
+          <div class="q-field"><label title="The maximum (full) buy price — what the item costs when fully stocked.">Base price</label><input id="mkb-base" class="q-in" type="number" value="100"></div>
+          <div class="q-field"><label title="Lowest price as a % of base — the price floats down to here when the trader is overstocked.">Min price %</label><input id="mkb-min" class="q-in" type="number" value="60"></div>
+          <div class="q-field"><label title="What players get back when selling, as a % of the buy price.">Sell %</label><input id="mkb-sell" class="q-in" type="number" value="60"></div></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px;"><button class="ghost" id="mkb-cancel">Cancel</button><button class="act" id="mkb-add">➕ Add items</button></div>
+      </div>`;
+      ov.classList.add('show');
+      const pick = ov.querySelector('#mkb-pick');
+      const existing = new Set((curMarket.model.Items || []).map(it => (it.ClassName || '').toLowerCase()));
+      const updateCount = () => { ov.querySelector('#mkb-count').textContent = pick.querySelectorAll('input:checked').length + ' selected'; };
+      const drawPick = () => {
+        const cat = ov.querySelector('#mkb-cat').value, q = ov.querySelector('#mkb-filter').value.toLowerCase();
+        if (!cat) { pick.innerHTML = '<div class="note">Pick a category to list its items.</div>'; updateCount(); return; }
+        const rows = (econRows || []).filter(r => r.category === cat && (!q || (r.name || '').toLowerCase().includes(q)));
+        pick.innerHTML = rows.slice(0, 500).map(r => { const dup = existing.has((r.name || '').toLowerCase()); return `<label class="mkb-row" style="${dup ? 'opacity:.45;' : ''}"><input type="checkbox" value="${esc(r.name)}" ${dup ? 'disabled' : 'checked'}><span>${esc(r.name)}</span>${dup ? '<span class="emut">in catalog</span>' : ''}</label>`; }).join('') + (rows.length > 500 ? '<div class="note">First 500 shown — filter to narrow.</div>' : '') + (rows.length ? '' : '<div class="note">No items in this category.</div>');
+        pick.querySelectorAll('input').forEach(cb => cb.onchange = updateCount); updateCount();
+      };
+      ov.querySelector('#mkb-cat').onchange = drawPick; ov.querySelector('#mkb-filter').oninput = drawPick;
+      ov.querySelector('#mkb-all').onclick = () => { pick.querySelectorAll('input:not(:disabled)').forEach(cb => cb.checked = true); updateCount(); };
+      ov.querySelector('#mkb-none').onclick = () => { pick.querySelectorAll('input').forEach(cb => cb.checked = false); updateCount(); };
+      ov.querySelector('#mkb-x').onclick = ov.querySelector('#mkb-cancel').onclick = () => ov.classList.remove('show');
+      ov.querySelector('#mkb-add').onclick = () => applyMarketBulk(ov, existing);
+      drawPick();
+    }
+    function applyMarketBulk(ov, existing) {
+      const base = parseFloat(ov.querySelector('#mkb-base').value) || 100;
+      const minPct = parseFloat(ov.querySelector('#mkb-min').value); const minP = Math.max(0, Math.round(base * (isFinite(minPct) ? minPct : 60) / 100));
+      const sellV = parseFloat(ov.querySelector('#mkb-sell').value); const sellP = isFinite(sellV) ? sellV : 60;
+      const picked = [...ov.querySelectorAll('#mkb-pick input:checked')].map(cb => cb.value);
+      const pasted = (ov.querySelector('#mkb-paste').value || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+      let added = 0;
+      [...new Set([...picked, ...pasted])].forEach(cls => {
+        if (existing.has(cls.toLowerCase())) return; existing.add(cls.toLowerCase());
+        curMarket.model.Items.push({ ClassName: cls, MaxPriceThreshold: base, MinPriceThreshold: minP, SellPricePercent: sellP, MaxStockThreshold: 1, MinStockThreshold: 1, QuantityPercent: -1, SpawnAttachments: [], Variants: [] }); added++;
+      });
+      if (!added) { toast('Nothing to add (already in catalog or none selected).', 'err'); return; }
+      markMarket(); renderMarketItems(); ov.classList.remove('show');
+      toast(`➕ Added ${added} item(s) priced ${minP}–${base} (sell ${sellP}%). Review and Save.`, 'ok');
     }
     async function loadConn() {
       try {
